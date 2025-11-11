@@ -30,7 +30,7 @@ async def download_telegram_file(file: File, bot: Bot) -> bytes:
 async def handle_photo(
         message: Message,
         bot: Bot,
-        user: User,  # Provided by middleware
+        user: User,
         session: AsyncSession,
 ):
     """Handle photo messages"""
