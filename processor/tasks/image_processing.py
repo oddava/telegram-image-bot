@@ -3,7 +3,7 @@ import io
 import time
 from datetime import datetime, timezone
 
-from aiogram.types import User
+import aiohttp
 from celery import shared_task
 
 from PIL import Image
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from shared.config import settings
 from shared.database import get_async_session
-from shared.models import ImageProcessingJob, ProcessingStatus
+from shared.models import ImageProcessingJob, ProcessingStatus, User
 from shared.s3_client import s3_client
 
 engine_kwargs = dict(
@@ -121,8 +121,6 @@ def _get_extension(options: dict) -> str:
 
 async def _send_result_to_user(job: ImageProcessingJob, image_data: bytes):
     """Send processed image back to user via Telegram Bot API"""
-    import aiohttp
-
     bot_token = settings.bot_token
     url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
 
@@ -135,7 +133,7 @@ async def _send_result_to_user(job: ImageProcessingJob, image_data: bytes):
         break
 
     data = aiohttp.FormData()
-    data.add_field("chat_id", str(telegram_id))  # Use telegram_id, not user_id
+    data.add_field("chat_id", str(telegram_id))
     data.add_field("photo", image_data, filename=f"result_{job.id}.png")
     data.add_field("caption", f"✅ Processing complete!\nJob ID: {job.id}")
 

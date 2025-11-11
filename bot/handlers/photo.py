@@ -121,8 +121,13 @@ async def handle_document(
     image_data = await download_telegram_file(file_info, bot)
 
     # Store original to S3
-    original_key = f"original/{user.telegram_id}/{uuid.uuid4()}_{document.file_name}"
-    await s3_client.upload_file(image_data, original_key, document.mime_type)
+    original_key = f"original/{user.telegram_id}/{uuid.uuid4()}.jpg"
+    try:
+        upload_url = await s3_client.upload_file(image_data, original_key, "image/jpeg")
+        print(f"✅ Uploaded to S3: {upload_url}")
+    except Exception as e:
+        print(f"❌ S3 Upload failed: {e}")
+        return await message.answer(f"❌ Failed to upload image: {str(e)}")
 
     # Create processing job
     job = ImageProcessingJob(
