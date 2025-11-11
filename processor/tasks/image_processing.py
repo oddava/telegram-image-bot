@@ -1,82 +1,96 @@
-import asyncio
 import io
 import time
 from datetime import datetime, timezone
-
-import aiohttp
 from celery import shared_task
 
 from PIL import Image
 from rembg import remove
-from sqlalchemy import NullPool
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from shared.config import settings
-from shared.database import get_async_session
-from shared.models import ImageProcessingJob, ProcessingStatus, User as SQLAlchemyUser
+from shared.models import ImageProcessingJob, ProcessingStatus, User
 from shared.s3_client import s3_client
 
-engine_kwargs = dict(
-    poolclass=NullPool,  # no pooling needed for short-lived workers
-    echo=False,
-)
+# Import synchronous SQLAlchemy
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+# Create sync engine for Celery tasks
+sync_database_url = settings.database_url.replace('postgresql+asyncpg://', 'postgresql://')
+sync_engine = create_engine(sync_database_url, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=sync_engine)
 
 
 @shared_task(bind=True, name="processor.tasks.image_processing.process_image")
 def process_image(self, job_id: str, options: dict):
+    """Process image based on job options"""
     start_time = time.time()
 
-    async def run_async():
-        engine = create_async_engine(settings.database_url, **engine_kwargs)
-        async_session = async_sessionmaker(engine, expire_on_commit=False)
+    session = SessionLocal()
+    try:
+        # Get job
+        job = session.get(ImageProcessingJob, job_id)
+        if not job:
+            raise ValueError(f"Job {job_id} not found")
 
-        async with async_session() as session:
-            job = await session.get(ImageProcessingJob, job_id)
-            if not job:
-                raise ValueError(f"Job {job_id} not found")
+        # Update status
+        job.status = ProcessingStatus.PROCESSING
+        job.updated_at = datetime.now(timezone.utc)
+        session.commit()
 
-            try:
-                job.status = ProcessingStatus.PROCESSING
-                job.updated_at = datetime.now(timezone.utc)
-                await session.commit()
+        # Download original from S3 (synchronous)
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            original_data = loop.run_until_complete(s3_client.download_file(job.original_file_key))
+        finally:
+            loop.close()
 
-                original_data = await s3_client.download_file(job.original_file_key)
+        # Process based on action
+        action = options.get("action", "remove_background")
+        processed_data = _process_image(original_data, action, options)
 
-                action = options.get("action", "remove_background")
-                processed_data = await _process_image(original_data, action, options)
+        # Upload processed image (synchronous)
+        extension = _get_extension(options)
+        processed_key = f"processed/{job.user_id}/{job.id}{extension}"
 
-                extension = _get_extension(options)
-                processed_key = f"processed/{job.user_id}/{job.id}{extension}"
-                await s3_client.upload_file(
-                    processed_data, processed_key, f"image/{extension.lstrip('.')}"
-                )
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(
+                s3_client.upload_file(processed_data, processed_key, f"image/{extension.lstrip('.')}")
+            )
+        finally:
+            loop.close()
 
-                job.processed_file_key = processed_key
-                job.status = ProcessingStatus.COMPLETED
-                job.processing_time_seconds = int(time.time() - start_time)
-                job.updated_at = datetime.now(timezone.utc)
-                await session.commit()
+        # Update job
+        job.processed_file_key = processed_key
+        job.status = ProcessingStatus.COMPLETED
+        job.processing_time_seconds = int(time.time() - start_time)
+        job.updated_at = datetime.now(timezone.utc)
+        session.commit()
 
-                await _send_result_to_user(job, processed_data)
+        # Send result to user
+        _send_result_to_user(session, job, processed_data)
 
-            except Exception as e:
-                job.status = ProcessingStatus.FAILED
-                job.error_message = str(e)[:500]
-                job.updated_at = datetime.now(timezone.utc)
-                await session.commit()
-                raise
-            finally:
-                await engine.dispose()
+    except Exception as e:
+        session.rollback()
+        job = session.get(ImageProcessingJob, job_id)
+        if job:
+            job.status = ProcessingStatus.FAILED
+            job.error_message = str(e)[:500]
+            job.updated_at = datetime.now(timezone.utc)
+            session.commit()
+        raise
+    finally:
+        session.close()
 
-    asyncio.run(run_async())
 
-
-async def _process_image(image_data: bytes, action: str, options: dict) -> bytes:
-    """Core image processing logic"""
+def _process_image(image_data: bytes, action: str, options: dict) -> bytes:
+    """Core image processing logic - now synchronous"""
     img = Image.open(io.BytesIO(image_data))
 
     if action == "remove_background":
-        # Use rembg for background removal
         output = remove(img)
         output_buffer = io.BytesIO()
         output.save(output_buffer, format="PNG")
@@ -106,7 +120,7 @@ async def _process_image(image_data: bytes, action: str, options: dict) -> bytes
         img.save(output_buffer, format=target_format.upper())
         return output_buffer.getvalue()
 
-    return image_data  # Default: return original
+    return image_data
 
 
 def _get_extension(options: dict) -> str:
@@ -119,26 +133,24 @@ def _get_extension(options: dict) -> str:
     return ".png"
 
 
-async def _send_result_to_user(job: ImageProcessingJob, image_data: bytes):
+def _send_result_to_user(session, job: ImageProcessingJob, image_data: bytes):
     """Send processed image back to user via Telegram Bot API"""
+    import requests
+
     bot_token = settings.bot_token
     url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
 
-    # Get the user's telegram_id from the database
-    async for session in get_async_session():
-        user = await session.get(SQLAlchemyUser, job.user_id)
-        if not user:
-            raise ValueError(f"User {job.user_id} not found")
-        telegram_id = user.telegram_id
-        break
+    # Get user's telegram_id
+    user = session.get(User, job.user_id)
+    if not user:
+        raise ValueError(f"User {job.user_id} not found")
 
-    data = aiohttp.FormData()
-    data.add_field("chat_id", str(telegram_id))
-    data.add_field("photo", image_data, filename=f"result_{job.id}.png")
-    data.add_field("caption", f"✅ Processing complete!\nJob ID: {job.id}")
+    files = {'photo': (f"result_{job.id}.png", image_data, 'image/png')}
+    data = {
+        'chat_id': str(user.telegram_id),
+        'caption': f"✅ Processing complete!\nJob ID: {job.id}"
+    }
 
-    async with aiohttp.ClientSession() as session:
-        response = await session.post(url, data=data)
-        if response.status != 200:
-            error_text = await response.text()
-            raise ValueError(f"Failed to send photo: {error_text}")
+    response = requests.post(url, files=files, data=data)
+    if response.status_code != 200:
+        raise ValueError(f"Failed to send photo: {response.text}")
