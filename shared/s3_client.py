@@ -1,6 +1,7 @@
-import io
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+import io
+from concurrent.futures.thread import ThreadPoolExecutor
+
 from minio import Minio
 from urllib.parse import urljoin
 
@@ -18,14 +19,24 @@ class S3Client:
         self.bucket_name = settings.minio_bucket_name
         self.public_url = settings.minio_public_url
         self.executor = ThreadPoolExecutor(max_workers=4)
-        self._ensure_bucket()
+        self._bucket_checked = False  # ✅ Add flag
 
     def _ensure_bucket(self):
-        if not self.client.bucket_exists(self.bucket_name):
-            self.client.make_bucket(self.bucket_name)
+        """Ensure bucket exists - called lazily on first use"""
+        if self._bucket_checked:
+            return
+
+        try:
+            if not self.client.bucket_exists(self.bucket_name):
+                self.client.make_bucket(self.bucket_name)
+            self._bucket_checked = True
+        except Exception as e:
+            print(f"Warning: Could not check/create bucket: {e}")
+            # Don't raise - let the actual operation fail if needed
 
     async def upload_file(self, file_data: bytes, object_key: str, content_type: str = "image/png") -> str:
         """Async wrapper for upload"""
+        self._ensure_bucket()
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             self.executor,
@@ -49,6 +60,7 @@ class S3Client:
 
     async def download_file(self, object_key: str) -> bytes:
         """Async wrapper for download"""
+        self._ensure_bucket()
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             self.executor,
@@ -69,6 +81,7 @@ class S3Client:
 
     async def delete_file(self, object_key: str):
         """Async wrapper for delete"""
+        self._ensure_bucket()
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             self.executor,
@@ -78,4 +91,4 @@ class S3Client:
         )
 
 
-s3_client = S3Client()
+s3_client = S3Client()  # ✅ Now safe to import
