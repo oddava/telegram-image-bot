@@ -1,47 +1,22 @@
-from datetime import datetime, timezone
-
 from aiogram import Router, types
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.i18n import gettext as _
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.config import settings
-from shared.models import User, UserTier
+from shared.models import User
 
 
 router = Router(name="commands")
 
 
 @router.message(CommandStart())
-async def cmd_start(message: types.Message, session: AsyncSession):
-    # Register or update user
-    user = await session.get(User, message.from_user.id)
-    if not user:
-        user = User(
-            telegram_id=message.from_user.id,
-            username=message.from_user.username,
-            full_name=message.from_user.full_name,
-            tier=UserTier.FREE,
-            quota_limit=settings.default_quota_free,
+async def cmd_start(message: types.Message, user: User):
+    # user is guaranteed to exist, since middleware creates it
+    await message.answer(
+        _("👋 Welcome back, {name}! You have {remaining} credits remaining.").format(
+            name=user.full_name,
+            remaining=user.quota_limit - user.quota_used
         )
-        session.add(user)
-        await session.commit()
-        await message.answer(
-            _("👋 Welcome! You have {quota} free image processing credits.").format(
-                quota=settings.default_quota_free
-            )
-        )
-    else:
-        # Update user info
-        user.username = message.from_user.username
-        user.full_name = message.from_user.full_name
-        user.last_seen = datetime.now(timezone.utc)
-        await session.commit()
-        await message.answer(
-            _("🔄 Welcome back! You have {remaining} credits remaining.").format(
-                remaining=user.quota_limit - user.quota_used
-            )
-        )
+    )
 
     await message.answer(
         _(
@@ -75,10 +50,7 @@ async def cmd_help(message: types.Message):
 
 
 @router.message(Command("quota"))
-async def cmd_quota(message: types.Message, session: AsyncSession) -> None:
-    user = await session.get(User, message.from_user.id)
-    if not user:
-        return await cmd_start(message, session)
+async def cmd_quota(message: types.Message, user: User) -> None:
 
     remaining = user.quota_limit - user.quota_used
     await message.answer(

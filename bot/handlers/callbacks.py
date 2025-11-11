@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from aiogram import Router, types, Bot
+from aiogram import Router
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 
