@@ -44,8 +44,8 @@ class User(Base):
     tier: Mapped[UserTier] = mapped_column(SQLEnum(UserTier), default=UserTier.FREE, nullable=False)
     quota_used: Mapped[int] = mapped_column(default=0, nullable=False)
     quota_limit: Mapped[int] = mapped_column(default=10, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc), nullable=False)
-    last_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     language: Mapped[str] = mapped_column(String(10), default="en", nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
@@ -64,8 +64,8 @@ class ImageProcessingJob(Base):
     status: Mapped[ProcessingStatus] = mapped_column(SQLEnum(ProcessingStatus), default=ProcessingStatus.PENDING, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     processing_options: Mapped[str] = mapped_column(Text, nullable=False)  # JSON string
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     processing_time_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
