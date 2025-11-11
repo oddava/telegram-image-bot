@@ -13,12 +13,18 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install uv
+RUN pip install --no-cache-dir uv
+
+# Copy dependency files
+COPY pyproject.toml uv.lock* ./
+
+# Install dependencies
+RUN uv sync --frozen --no-dev
 
 # Copy application code
 COPY shared/ ./shared/
 COPY processor/ ./processor/
 
-CMD ["python", "-m", "processor.worker"]
+# Use uv to run the worker
+CMD ["uv", "run", "python", "-m", "processor.worker"]
