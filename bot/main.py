@@ -6,6 +6,7 @@ from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.utils.i18n import I18n
 from aiogram.utils.i18n.middleware import I18nMiddleware
 
+from bot.middlewares.i18n import CustomI18nMiddleware
 from shared.config import settings
 from shared.database import engine, async_session_maker
 from bot.handlers import commands, photo, callbacks
@@ -31,7 +32,8 @@ dp = Dispatcher(storage=RedisStorage.from_url(settings.redis_url))
 
 # Setup i18n
 i18n = I18n(path="bot/locales", default_locale="en", domain="messages")
-dp.update.middleware(I18nMiddleware(i18n))
+dp.message.middleware(CustomI18nMiddleware(i18n))
+dp.callback_query.middleware(CustomI18nMiddleware(i18n))
 
 
 # Register global middlewares (order matters!)
