@@ -17,8 +17,7 @@ router = Router(name="photo")
 router.message.filter(F.photo | F.document)
 
 async def download_telegram_file(file: File, bot: Bot) -> bytes:
-    file_info = await bot.get_file(file.file_id)
-    maybe_buffer = await bot.download(file_info.file_path)
+    maybe_buffer = await bot.download(file.file_id)
     if maybe_buffer is None:
         raise RuntimeError("Download failed, got None instead of BytesIO.")
     assert isinstance(maybe_buffer, BytesIO)
