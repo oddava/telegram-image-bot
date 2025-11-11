@@ -33,7 +33,7 @@ dp = Dispatcher(storage=RedisStorage.from_url(settings.redis_url))
 i18n = I18n(path="bot/locales", default_locale="en", domain="messages")
 
 # Register global middlewares (order matters!)
-dp.update.middleware(UserManagementMiddleware(async_session_maker))
+dp.update.middleware(UserManagementMiddleware())
 
 # Register quota middleware only for specific routers
 photo.router.message.middleware(QuotaCheckMiddleware())
