@@ -31,9 +31,12 @@ dp = Dispatcher(storage=RedisStorage.from_url(settings.redis_url))
 
 # Setup i18n
 i18n = I18n(path="bot/locales", default_locale="en", domain="messages")
+dp.update.middleware(I18nMiddleware(i18n))
+
 
 # Register global middlewares (order matters!)
 dp.update.middleware(UserManagementMiddleware())
+
 
 # Register quota middleware only for specific routers
 photo.router.message.middleware(QuotaCheckMiddleware())
