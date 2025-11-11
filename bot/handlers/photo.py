@@ -1,0 +1,146 @@
+import uuid
+from datetime import datetime
+from io import BytesIO
+
+from aiogram import Router, F, Bot
+from aiogram.types import BufferedInputFile, Message, File, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.i18n import gettext as _
+from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+from shared.config import settings
+from shared.models import User, ImageProcessingJob, ProcessingStatus
+from shared.s3_client import s3_client
+
+router = Router(name="photo")
+router.message.filter(F.photo | F.document)
+
+async def download_telegram_file(file: File, bot: Bot) -> bytes:
+    file_info = await bot.get_file(file.file_id)
+    maybe_buffer = await bot.download(file_info.file_path)
+    if maybe_buffer is None:
+        raise RuntimeError("Download failed, got None instead of BytesIO.")
+    assert isinstance(maybe_buffer, BytesIO)
+    return maybe_buffer.getvalue()
+
+
+
+@router.message(F.photo)
+async def handle_photo(
+        message: Message,
+        bot: Bot,
+        user: User,  # Provided by middleware
+        session: AsyncSession,
+):
+    """Handle photo messages"""
+    # Quota already checked by middleware
+
+    photo = message.photo[-1]  # Get highest quality
+
+    if photo.file_size > settings.max_file_size_bytes:
+        return await message.answer(
+            _("❌ File too large! Max size: {size} MB").format(
+                size=settings.max_file_size_mb
+            )
+        )
+
+    await message.answer(_("📥 Downloading image..."))
+    file_info = await bot.get_file(photo.file_id)
+    image_data = await download_telegram_file(file_info, bot)
+
+    # Store original to S3
+    original_key = f"original/{user.telegram_id}/{uuid.uuid4()}.jpg"
+    await s3_client.upload_file(image_data, original_key, "image/jpeg")
+
+    # Create processing job
+    job = ImageProcessingJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        original_filename=f"photo_{photo.file_id}.jpg",
+        original_file_key=original_key,
+        status=ProcessingStatus.PENDING,
+        processing_options='{"action": "remove_background"}',
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    session.add(job)
+    await session.commit()
+
+    # Show processing options
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🖼️ Remove Background",
+                    callback_data=f"process:bg:{job.id}"
+                ),
+                InlineKeyboardButton(
+                    text="🔄 Convert Format",
+                    callback_data=f"process:convert:{job.id}"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📐 Resize",
+                    callback_data=f"process:resize:{job.id}"
+                ),
+                InlineKeyboardButton(
+                    text="📦 Batch",
+                    callback_data=f"process:batch:{job.id}"
+                ),
+            ],
+        ]
+    )
+
+    await message.answer_photo(
+        photo=BufferedInputFile(image_data, filename="preview.jpg"),
+        caption=_("Choose processing option:"),
+        reply_markup=keyboard,
+    )
+
+
+@router.message(F.document & F.document.mime_type.startswith("image/"))
+async def handle_document(
+        message: Message,
+        bot: Bot,
+        user: User,  # Provided by middleware
+        session: AsyncSession,
+):
+    """Handle document messages"""
+    document = message.document
+
+    if document.file_size > settings.max_file_size_bytes:
+        return await message.answer(
+            _("❌ File too large! Max size: {size} MB").format(
+                size=settings.max_file_size_mb
+            )
+        )
+
+    await message.answer(_("📥 Downloading document..."))
+    file_info = await bot.get_file(document.file_id)
+    image_data = await download_telegram_file(file_info, bot)
+
+    # Store original to S3
+    original_key = f"original/{user.telegram_id}/{uuid.uuid4()}_{document.file_name}"
+    await s3_client.upload_file(image_data, original_key, document.mime_type)
+
+    # Create processing job
+    job = ImageProcessingJob(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        original_filename=document.file_name,
+        original_file_key=original_key,
+        status=ProcessingStatus.PENDING,
+        processing_options='{"action": "remove_background"}',
+        created_at=func.now(),
+        updated_at=func.now(),
+    )
+    session.add(job)
+    await session.commit()
+
+    await message.answer(
+        _("✅ Document received! Use /history to process it.\nJob ID: {job_id}").format(
+            job_id=job.id
+        )
+    )
