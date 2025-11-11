@@ -25,6 +25,8 @@ COPY pyproject.toml uv.lock* ./
 # Install dependencies
 RUN uv sync --frozen --no-dev
 
+RUN uv pip install --no-cache onnxruntime
+
 # Copy application code
 COPY shared/ ./shared/
 COPY processor/ ./processor/
