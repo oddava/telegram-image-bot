@@ -52,13 +52,14 @@ def process_image(self, job_id: str, options: dict):
 
         # Upload processed image (synchronous)
         extension = _get_extension(options)
+        content_type = _get_content_type(options)
         processed_key = f"processed/{job.user_id}/{job.id}{extension}"
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(
-                s3_client.upload_file(processed_data, processed_key, f"image/{extension.lstrip('.')}")
+                s3_client.upload_file(processed_data, processed_key, content_type)
             )
         finally:
             loop.close()
@@ -71,7 +72,7 @@ def process_image(self, job_id: str, options: dict):
         session.commit()
 
         # Send result to user
-        _send_result_to_user(session, job, processed_data)
+        _send_result_to_user(session, job, processed_data, content_type)
 
     except Exception as e:
         session.rollback()
@@ -106,47 +107,88 @@ def _process_image(image_data: bytes, action: str, options: dict) -> bytes:
         return output_buffer.getvalue()
 
     elif action == "format_conversion":
-        target_format = options.get("target_format", "png")
+        target_format = options.get("target_format", "png").lower()
         output_buffer = io.BytesIO()
 
-        if target_format.lower() == "jpg" or target_format.lower() == "jpeg":
-            target_format = "JPEG"
-            if img.mode in ("RGBA", "LA", "P"):
-                background = Image.new("RGB", img.size, (255, 255, 255))
-                if img.mode == "RGBA":
-                    background.paste(img, mask=img.split()[-1])
-                else:
-                    background.paste(img)
-                img = background
+        # Map format names
+        format_map = {
+            "jpg": "JPEG",
+            "jpeg": "JPEG",
+            "png": "PNG",
+            "webp": "WEBP"
+        }
 
-        img.save(output_buffer, format=target_format.upper())
+        pil_format = format_map.get(target_format, "PNG")
+
+        # Convert RGBA to RGB for JPEG
+        if pil_format == "JPEG" and img.mode in ("RGBA", "LA", "P"):
+            background = Image.new("RGB", img.size, (255, 255, 255))
+            if img.mode == "RGBA":
+                background.paste(img, mask=img.split()[-1])
+            else:
+                background.paste(img)
+            img = background
+
+        img.save(output_buffer, format=pil_format)
         return output_buffer.getvalue()
 
     return image_data
 
 
 def _get_extension(options: dict) -> str:
+    """Get file extension based on action"""
     action = options.get("action", "")
+
     if action == "remove_background":
         return ".png"
-    elif action == "format_conversion":  # ✅ Changed
-        fmt = options.get("target_format", "png")
-        return f".{fmt.lower()}"
+    elif action == "format_conversion":
+        fmt = options.get("target_format", "png").lower()
+        # Normalize jpeg to jpg
+        if fmt == "jpeg":
+            fmt = "jpg"
+        return f".{fmt}"
+    elif action == "resize":
+        return ".jpg"
+
     return ".png"
 
-def _send_result_to_user(session, job: ImageProcessingJob, image_data: bytes):
+
+def _get_content_type(options: dict) -> str:
+    """Get MIME type based on action"""
+    action = options.get("action", "")
+
+    if action == "format_conversion":
+        fmt = options.get("target_format", "png").lower()
+        mime_map = {
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "webp": "image/webp"
+        }
+        return mime_map.get(fmt, "image/png")
+    elif action == "remove_background":
+        return "image/png"
+
+    return "image/jpeg"
+
+
+def _send_result_to_user(session, job: ImageProcessingJob, image_data: bytes, content_type: str):
     """Send processed image back to user via Telegram Bot API"""
     import requests
 
     bot_token = settings.bot_token
-    url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"  # Use sendDocument for formats
 
     # Get user's telegram_id
     user = session.get(User, job.user_id)
     if not user:
         raise ValueError(f"User {job.user_id} not found")
 
-    files = {'photo': (f"result_{job.id}.png", image_data, 'image/png')}
+    # Get proper filename
+    extension = _get_extension({"action": job.processing_options})
+    filename = f"result_{job.id}{extension}"
+
+    files = {'document': (filename, image_data, content_type)}
     data = {
         'chat_id': str(user.telegram_id),
         'caption': f"✅ Processing complete!\nJob ID: {job.id}"
@@ -154,4 +196,4 @@ def _send_result_to_user(session, job: ImageProcessingJob, image_data: bytes):
 
     response = requests.post(url, files=files, data=data)
     if response.status_code != 200:
-        raise ValueError(f"Failed to send photo: {response.text}")
+        raise ValueError(f"Failed to send document: {response.text}")
