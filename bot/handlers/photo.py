@@ -103,7 +103,6 @@ async def handle_photo(
             ],
         ]
     )
-
     await message.answer_photo(
         photo=BufferedInputFile(image_data, filename="preview.jpg"),
         caption=_("Choose processing option:"),
