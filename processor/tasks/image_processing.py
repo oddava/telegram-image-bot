@@ -106,7 +106,7 @@ def _process_image(image_data: bytes, action: str, options: dict) -> bytes:
         resized.save(output_buffer, format=format)
         return output_buffer.getvalue()
 
-    elif action == "convert":
+    elif action == "format_conversion":
         target_format = options.get("target_format", "png").lower()
         output_buffer = io.BytesIO()
 
