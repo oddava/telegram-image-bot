@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from io import BytesIO
@@ -8,13 +9,14 @@ from aiogram.utils.i18n import gettext as _
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.main import logger
 from shared.config import settings
 from shared.models import User, ImageProcessingJob, ProcessingStatus
 from shared.s3_client import s3_client
 
 router = Router(name="photo")
 router.message.filter(F.photo | F.document)
+
+logger = logging.getLogger(__name__)
 
 async def download_telegram_file(file: File, bot: Bot) -> bytes:
     maybe_buffer = await bot.download(file.file_id)
