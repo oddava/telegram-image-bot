@@ -35,8 +35,14 @@ async def handle_processing_callback(
         return await callback.message.answer(_("❌ Job not found or access denied"))
 
     # Prepare processing options
+    action_map = {
+        "bg": "remove_background",
+        "resize": "resize",
+        "batch": "batch",
+    }
+
     options = {
-        "action": action,
+        "action": action_map.get(action, action),
         "user_tier": user.tier.value,
         "telegram_message_id": callback.message.message_id,
     }

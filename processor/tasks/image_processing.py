@@ -1,6 +1,8 @@
 import io
 import time
 from datetime import datetime, timezone
+
+from aiogram.types import User
 from celery import shared_task
 
 from PIL import Image
@@ -118,12 +120,21 @@ async def _send_result_to_user(job: ImageProcessingJob, image_data: bytes):
     bot_token = settings.bot_token
     url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
 
-    # In production, use proper bot API call with file upload
-    # For brevity, this is a simplified version
+    # Get the user's telegram_id from the database
+    async for session in get_async_session():
+        user = await session.get(User, job.user_id)
+        if not user:
+            raise ValueError(f"User {job.user_id} not found")
+        telegram_id = user.telegram_id
+        break
+
     data = aiohttp.FormData()
-    data.add_field("chat_id", job.user_id)
+    data.add_field("chat_id", str(telegram_id))  # Use telegram_id, not user_id
     data.add_field("photo", image_data, filename=f"result_{job.id}.png")
     data.add_field("caption", f"✅ Processing complete!\nJob ID: {job.id}")
 
     async with aiohttp.ClientSession() as session:
-        await session.post(url, data=data)
+        response = await session.post(url, data=data)
+        if response.status != 200:
+            error_text = await response.text()
+            raise ValueError(f"Failed to send photo: {error_text}")
