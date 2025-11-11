@@ -50,7 +50,7 @@ services:
   bot:
     build:
       context: .
-      dockerfile: Dockerfile.bot.bot
+      dockerfile: Dockerfile.bot
     depends_on:
       postgres:
         condition: service_healthy
