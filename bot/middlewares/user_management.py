@@ -1,5 +1,5 @@
 from typing import Callable, Dict, Any, Awaitable
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from aiogram import BaseMiddleware
@@ -51,8 +51,8 @@ class UserManagementMiddleware(BaseMiddleware):
                     tier=UserTier.FREE,
                     quota_limit=settings.default_quota_free,
                     quota_used=0,
-                    created_at=datetime.utcnow(),
-                    last_seen=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
+                    last_seen=datetime.now(timezone.utc),
                     is_active=True,
                 )
                 session.add(user)
@@ -72,7 +72,7 @@ class UserManagementMiddleware(BaseMiddleware):
                     await session.rollback()
                     logger.error(f"Failed to create user: {e}")
             else:
-                user.last_seen = datetime.utcnow()
+                user.last_seen = datetime.now(timezone.utc)
                 user.is_active = True
                 if user.username != telegram_user.username:
                     user.username = telegram_user.username

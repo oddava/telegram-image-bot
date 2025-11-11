@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 
 from aiogram import Router, F, Bot
@@ -60,8 +60,8 @@ async def handle_photo(
         original_file_key=original_key,
         status=ProcessingStatus.PENDING,
         processing_options='{"action": "remove_background"}',
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     session.add(job)
     await session.commit()
