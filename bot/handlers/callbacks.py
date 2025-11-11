@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from aiogram import Router
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from shared.models import User, ImageProcessingJob, ProcessingStatus
 from ..services.task_publisher import publish_processing_task
@@ -65,7 +66,6 @@ async def handle_processing_callback(
 
     # Handle format conversion
     if action_type == "format":
-        # Format buttons: format:png:job_id
         target_format = action  # "png", "jpg", or "webp"
         options = {
             "action": "format_conversion",
@@ -74,31 +74,43 @@ async def handle_processing_callback(
             "telegram_message_id": callback.message.message_id,
         }
     else:
-        # Regular process buttons: process:bg:job_id
         options = {
             "action": action_map.get(action, action),
             "user_tier": user.tier.value,
             "telegram_message_id": callback.message.message_id,
         }
 
-    # Increment quota FIRST (before updating job)
+    # Refresh user from database to get latest quota
+    await session.refresh(user)
+
+    print(f"DEBUG: Before increment - User {user.id}, quota_used: {user.quota_used}")
+
+    # Increment quota
     user.quota_used += 1
+
+    print(f"DEBUG: After increment - User {user.id}, quota_used: {user.quota_used}")
 
     # Update job
     job.processing_options = str(options)
     job.status = ProcessingStatus.PENDING
     job.updated_at = datetime.now(timezone.utc)
 
-    # Commit both user and job updates together
+    # Commit both updates
     await session.commit()
+
+    print(f"DEBUG: After commit - User {user.id}, quota_used: {user.quota_used}")
 
     # Publish to processing queue
     await publish_processing_task(str(job.id), options)
+
+    remaining = user.quota_limit - user.quota_used
+
+    print(f"DEBUG: Remaining credits: {remaining}")
 
     await callback.message.answer(
         _("✅ Processing started! You'll receive the result shortly.\n\nJob ID: {job_id}\n"
           "Remaining credits: {remaining}").format(
             job_id=job.id,
-            remaining=user.quota_limit - user.quota_used
+            remaining=remaining
         )
     )
