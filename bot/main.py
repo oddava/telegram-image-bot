@@ -30,7 +30,7 @@ bot = Bot(
 dp = Dispatcher(storage=RedisStorage.from_url(settings.redis_url))
 
 # Setup i18n
-i18n = I18n(path="locales", default_locale="en", domain="messages")
+i18n = I18n(path="bot/locales", default_locale="en", domain="messages")
 
 # Register global middlewares (order matters!)
 dp.update.middleware(UserManagementMiddleware(async_session_maker))
