@@ -8,7 +8,7 @@ from aiogram.utils.i18n import I18n
 from bot.middlewares.database import DatabaseMiddleware
 from bot.middlewares.i18n import CustomI18nMiddleware
 from shared.config import settings
-from shared.database import engine, get_async_session, async_session_maker
+from shared.database import engine, async_session_maker
 from bot.handlers import commands, photo, callbacks
 from bot.middlewares.user_management import UserManagementMiddleware
 from bot.middlewares.quota_check import QuotaCheckMiddleware

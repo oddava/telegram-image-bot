@@ -1,3 +1,4 @@
+import asyncio
 import io
 import time
 from datetime import datetime, timezone
@@ -7,20 +8,29 @@ from celery import shared_task
 
 from PIL import Image
 from rembg import remove
+from sqlalchemy import NullPool
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from shared.config import settings
 from shared.database import get_async_session
 from shared.models import ImageProcessingJob, ProcessingStatus
 from shared.s3_client import s3_client
 
+engine_kwargs = dict(
+    poolclass=NullPool,  # no pooling needed for short-lived workers
+    echo=False,
+)
+
 
 @shared_task(bind=True, name="processor.tasks.image_processing.process_image")
 def process_image(self, job_id: str, options: dict):
-    """Process image based on job options"""
     start_time = time.time()
 
     async def run_async():
-        async for session in get_async_session():
+        engine = create_async_engine(settings.database_url, **engine_kwargs)
+        async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with async_session() as session:
             job = await session.get(ImageProcessingJob, job_id)
             if not job:
                 raise ValueError(f"Job {job_id} not found")
@@ -30,28 +40,23 @@ def process_image(self, job_id: str, options: dict):
                 job.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
-                # Download original from S3
                 original_data = await s3_client.download_file(job.original_file_key)
 
-                # Process based on action
                 action = options.get("action", "remove_background")
                 processed_data = await _process_image(original_data, action, options)
 
-                # Upload processed image
                 extension = _get_extension(options)
                 processed_key = f"processed/{job.user_id}/{job.id}{extension}"
                 await s3_client.upload_file(
                     processed_data, processed_key, f"image/{extension.lstrip('.')}"
                 )
 
-                # Update job
                 job.processed_file_key = processed_key
                 job.status = ProcessingStatus.COMPLETED
                 job.processing_time_seconds = int(time.time() - start_time)
                 job.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
-                # Send result to user (via Telegram Bot API)
                 await _send_result_to_user(job, processed_data)
 
             except Exception as e:
@@ -60,8 +65,9 @@ def process_image(self, job_id: str, options: dict):
                 job.updated_at = datetime.now(timezone.utc)
                 await session.commit()
                 raise
+            finally:
+                await engine.dispose()
 
-    import asyncio
     asyncio.run(run_async())
 
 
