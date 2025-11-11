@@ -1,12 +1,9 @@
 import io
 import time
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timezone
 from celery import shared_task
-import traceback
 
 from PIL import Image
-import numpy as np
 from rembg import remove
 
 from shared.config import settings
@@ -28,7 +25,7 @@ def process_image(self, job_id: str, options: dict):
 
             try:
                 job.status = ProcessingStatus.PROCESSING
-                job.updated_at = datetime.utcnow()
+                job.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
                 # Download original from S3
@@ -49,7 +46,7 @@ def process_image(self, job_id: str, options: dict):
                 job.processed_file_key = processed_key
                 job.status = ProcessingStatus.COMPLETED
                 job.processing_time_seconds = int(time.time() - start_time)
-                job.updated_at = datetime.utcnow()
+                job.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
                 # Send result to user (via Telegram Bot API)
@@ -58,7 +55,7 @@ def process_image(self, job_id: str, options: dict):
             except Exception as e:
                 job.status = ProcessingStatus.FAILED
                 job.error_message = str(e)[:500]
-                job.updated_at = datetime.utcnow()
+                job.updated_at = datetime.now(timezone.utc)
                 await session.commit()
                 raise
 
