@@ -80,15 +80,17 @@ async def handle_processing_callback(
             "telegram_message_id": callback.message.message_id,
         }
 
-    # Refresh user from database to get latest quota
-    await session.refresh(user)
+    # Fetch fresh user from THIS session
+    db_user = await session.get(User, user.id)
+    if not db_user:
+        return await callback.message.answer(_("❌ User not found"))
 
-    print(f"DEBUG: Before increment - User {user.id}, quota_used: {user.quota_used}")
+    print(f"DEBUG: Before increment - User {db_user.id}, quota_used: {db_user.quota_used}")
 
     # Increment quota
-    user.quota_used += 1
+    db_user.quota_used += 1
 
-    print(f"DEBUG: After increment - User {user.id}, quota_used: {user.quota_used}")
+    print(f"DEBUG: After increment - User {db_user.id}, quota_used: {db_user.quota_used}")
 
     # Update job
     job.processing_options = str(options)
@@ -98,12 +100,12 @@ async def handle_processing_callback(
     # Commit both updates
     await session.commit()
 
-    print(f"DEBUG: After commit - User {user.id}, quota_used: {user.quota_used}")
+    print(f"DEBUG: After commit - User {db_user.id}, quota_used: {db_user.quota_used}")
 
     # Publish to processing queue
     await publish_processing_task(str(job.id), options)
 
-    remaining = user.quota_limit - user.quota_used
+    remaining = db_user.quota_limit - db_user.quota_used
 
     print(f"DEBUG: Remaining credits: {remaining}")
 
