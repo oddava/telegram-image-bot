@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from shared.config import settings
 from shared.database import get_async_session
-from shared.models import ImageProcessingJob, ProcessingStatus, User
+from shared.models import ImageProcessingJob, ProcessingStatus, User as SQLAlchemyUser
 from shared.s3_client import s3_client
 
 engine_kwargs = dict(
@@ -126,7 +126,7 @@ async def _send_result_to_user(job: ImageProcessingJob, image_data: bytes):
 
     # Get the user's telegram_id from the database
     async for session in get_async_session():
-        user = await session.get(User, job.user_id)
+        user = await session.get(SQLAlchemyUser, job.user_id)
         if not user:
             raise ValueError(f"User {job.user_id} not found")
         telegram_id = user.telegram_id

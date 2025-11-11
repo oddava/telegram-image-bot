@@ -8,7 +8,7 @@ from aiogram.utils.i18n import gettext as _
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
+from bot.main import logger
 from shared.config import settings
 from shared.models import User, ImageProcessingJob, ProcessingStatus
 from shared.s3_client import s3_client
@@ -22,7 +22,6 @@ async def download_telegram_file(file: File, bot: Bot) -> bytes:
         raise RuntimeError("Download failed, got None instead of BytesIO.")
     assert isinstance(maybe_buffer, BytesIO)
     return maybe_buffer.getvalue()
-
 
 
 @router.message(F.photo)
@@ -48,9 +47,18 @@ async def handle_photo(
     file_info = await bot.get_file(photo.file_id)
     image_data = await download_telegram_file(file_info, bot)
 
+    logger.info(f"Downloaded image: {len(image_data)} bytes")
+
     # Store original to S3
     original_key = f"original/{user.telegram_id}/{uuid.uuid4()}.jpg"
-    await s3_client.upload_file(image_data, original_key, "image/jpeg")
+
+    try:
+        logger.info(f"Uploading to S3: {original_key}")
+        upload_url = await s3_client.upload_file(image_data, original_key, "image/jpeg")
+        logger.info(f"✅ Successfully uploaded to S3: {upload_url}")
+    except Exception as e:
+        logger.error(f"❌ S3 Upload failed: {e}", exc_info=True)
+        return await message.answer(f"❌ Failed to upload image: {str(e)}")
 
     # Create processing job
     job = ImageProcessingJob(
@@ -65,6 +73,8 @@ async def handle_photo(
     )
     session.add(job)
     await session.commit()
+
+    logger.info(f"Created job {job.id} for file {original_key}")
 
     # Show processing options
     keyboard = InlineKeyboardMarkup(
@@ -103,7 +113,7 @@ async def handle_photo(
 async def handle_document(
         message: Message,
         bot: Bot,
-        user: User,  # Provided by middleware
+        user: User,
         session: AsyncSession,
 ):
     """Handle document messages"""
