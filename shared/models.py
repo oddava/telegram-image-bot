@@ -2,13 +2,13 @@ from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID as PyUUID, uuid4
 
-from sqlalchemy import(
+from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
-    Enum as SQLEnum,
+    Enum as SQLEnum, BigInteger,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -38,7 +38,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    telegram_id: Mapped[int] = mapped_column(unique=True, nullable=False, index=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tier: Mapped[UserTier] = mapped_column(SQLEnum(UserTier), default=UserTier.FREE, nullable=False)
