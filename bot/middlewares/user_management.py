@@ -5,6 +5,7 @@ import logging
 from aiogram import BaseMiddleware
 from aiogram.types import Update, User as TelegramUser
 from aiogram.utils.i18n import gettext as _
+from sqlalchemy import select
 
 from shared.database import async_session_maker
 from shared.models import User, UserTier
@@ -39,10 +40,10 @@ class UserManagementMiddleware(BaseMiddleware):
 
         # Get or create user in database
         async with async_session_maker() as session:
-            user = await session.get(User, telegram_user.id)
+            result = await session.execute(select(User).where(User.telegram_id == telegram_user.id))
+            user = result.scalar_one_or_none()
 
             if not user:
-                # Register new user
                 user = User(
                     telegram_id=telegram_user.id,
                     username=telegram_user.username,
@@ -55,36 +56,30 @@ class UserManagementMiddleware(BaseMiddleware):
                     is_active=True,
                 )
                 session.add(user)
-                await session.commit()
-                await session.refresh(user)
-                logger.info(f"✅ New user registered: {user.telegram_id} (@{user.username})")
+                try:
+                    await session.commit()
+                    await session.refresh(user)
+                    logger.info(f"✅ New user registered: {user.telegram_id} (@{user.username})")
 
-                # Send welcome message for new users
-                if event.message:
-                    await event.message.answer(
-                        _(
-                            "👋 Welcome! You have {quota} free image processing credits.\n\n"
-                            "Send me an image to get started!"
-                        ).format(quota=settings.default_quota_free)
-                    )
+                    if event.message:
+                        await event.message.answer(
+                            _(
+                                "👋 Welcome! You have {quota} free image processing credits.\n\n"
+                                "Send me an image to get started!"
+                            ).format(quota=settings.default_quota_free)
+                        )
+                except Exception as e:
+                    await session.rollback()
+                    logger.error(f"Failed to create user: {e}")
             else:
-                # Update existing user metadata
-                needs_update = False
-                if user.username != telegram_user.username:
-                    user.username = telegram_user.username
-                    needs_update = True
-                if user.full_name != telegram_user.full_name:
-                    user.full_name = telegram_user.full_name or telegram_user.username or "User"
-                    needs_update = True
-
                 user.last_seen = datetime.utcnow()
                 user.is_active = True
+                if user.username != telegram_user.username:
+                    user.username = telegram_user.username
+                if user.full_name != (telegram_user.full_name or telegram_user.username or "User"):
+                    user.full_name = telegram_user.full_name or telegram_user.username or "User"
+                await session.commit()
 
-                if needs_update:
-                    await session.commit()
-                    logger.debug(f"🔄 User updated: {user.telegram_id}")
-
-            # Attach user to handler data
             data["user"] = user
 
         return await handler(event, data)
