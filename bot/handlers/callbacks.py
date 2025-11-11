@@ -22,7 +22,15 @@ async def handle_processing_callback(
     """Handle processing option selection"""
     await callback.answer()
 
-    x, action, job_id_str = callback.data.split(":")
+    # Parse callback data
+    parts = callback.data.split(":")
+
+    if len(parts) < 3:
+        return await callback.message.answer(_("❌ Invalid callback data"))
+
+    action_type = parts[0]  # "process" or "format"
+    action = parts[1]
+    job_id_str = parts[2]
 
     try:
         job_id = uuid.UUID(job_id_str)
@@ -34,21 +42,8 @@ async def handle_processing_callback(
     if not job or job.user_id != user.id:
         return await callback.message.answer(_("❌ Job not found or access denied"))
 
-    # Prepare processing options
-    action_map = {
-        "bg": "remove_background",
-        "resize": "resize",
-        "batch": "batch",
-    }
-
-    options = {
-        "action": action_map.get(action, action),
-        "user_tier": user.tier.value,
-        "telegram_message_id": callback.message.message_id,
-    }
-
-    # Handle format selection submenu
-    if action == "convert":
+    # Handle convert submenu (show format options)
+    if action == "convert" and action_type == "process":
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -61,27 +56,44 @@ async def handle_processing_callback(
         )
         return await callback.message.edit_reply_markup(reply_markup=keyboard)
 
-    elif action.startswith("format:"):
-        _, fmt, _ = callback.data.split(":")
-        options["target_format"] = fmt
-        options["action"] = "format_conversion"
+    # Prepare processing options
+    action_map = {
+        "bg": "remove_background",
+        "resize": "resize",
+        "batch": "batch",
+    }
 
-        # Increment quota for format conversion (separate operation)
-        user.quota_used += 1
-        await session.commit()
+    # Handle format conversion
+    if action_type == "format":
+        # Format buttons: format:png:job_id
+        target_format = action  # "png", "jpg", or "webp"
+        options = {
+            "action": "format_conversion",
+            "target_format": target_format,
+            "user_tier": user.tier.value,
+            "telegram_message_id": callback.message.message_id,
+        }
+    else:
+        # Regular process buttons: process:bg:job_id
+        options = {
+            "action": action_map.get(action, action),
+            "user_tier": user.tier.value,
+            "telegram_message_id": callback.message.message_id,
+        }
 
-    # Publish to processing queue
+    # Increment quota FIRST (before updating job)
+    user.quota_used += 1
+
+    # Update job
     job.processing_options = str(options)
     job.status = ProcessingStatus.PENDING
     job.updated_at = datetime.now(timezone.utc)
+
+    # Commit both user and job updates together
     await session.commit()
 
+    # Publish to processing queue
     await publish_processing_task(str(job.id), options)
-
-    # Increment quota for main operation
-    if not action.startswith("format:"):
-        user.quota_used += 1
-        await session.commit()
 
     await callback.message.answer(
         _("✅ Processing started! You'll receive the result shortly.\n\nJob ID: {job_id}\n"
@@ -90,4 +102,3 @@ async def handle_processing_callback(
             remaining=user.quota_limit - user.quota_used
         )
     )
-    return None

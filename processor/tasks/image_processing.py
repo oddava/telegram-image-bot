@@ -15,7 +15,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # Create sync engine for Celery tasks
-sync_database_url = settings.database_url.replace('postgresql+asyncpg://', 'postgresql://')
+sync_database_url = settings.database_url.replace('postgresql+asyncpg://', 'postgresql+psycopg2://')
 sync_engine = create_engine(sync_database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=sync_engine)
 
@@ -87,7 +87,7 @@ def process_image(self, job_id: str, options: dict):
 
 
 def _process_image(image_data: bytes, action: str, options: dict) -> bytes:
-    """Core image processing logic - now synchronous"""
+    """Core image processing logic"""
     img = Image.open(io.BytesIO(image_data))
 
     if action == "remove_background":
@@ -105,16 +105,18 @@ def _process_image(image_data: bytes, action: str, options: dict) -> bytes:
         resized.save(output_buffer, format=format)
         return output_buffer.getvalue()
 
-    elif action.startswith("format:"):
+    elif action == "format_conversion":
         target_format = options.get("target_format", "png")
         output_buffer = io.BytesIO()
 
-        if target_format.lower() == "jpg":
+        if target_format.lower() == "jpg" or target_format.lower() == "jpeg":
             target_format = "JPEG"
-            if img.mode in ("RGBA", "LA"):
+            if img.mode in ("RGBA", "LA", "P"):
                 background = Image.new("RGB", img.size, (255, 255, 255))
                 if img.mode == "RGBA":
                     background.paste(img, mask=img.split()[-1])
+                else:
+                    background.paste(img)
                 img = background
 
         img.save(output_buffer, format=target_format.upper())
@@ -127,11 +129,10 @@ def _get_extension(options: dict) -> str:
     action = options.get("action", "")
     if action == "remove_background":
         return ".png"
-    elif action.startswith("format:"):
+    elif action == "format_conversion":  # ✅ Changed
         fmt = options.get("target_format", "png")
-        return f".{fmt}"
+        return f".{fmt.lower()}"
     return ".png"
-
 
 def _send_result_to_user(session, job: ImageProcessingJob, image_data: bytes):
     """Send processed image back to user via Telegram Bot API"""
