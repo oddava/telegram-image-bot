@@ -4,11 +4,10 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.utils.i18n import I18n
-from aiogram.utils.i18n.middleware import I18nMiddleware
 
 from bot.middlewares.i18n import CustomI18nMiddleware
 from shared.config import settings
-from shared.database import engine, async_session_maker
+from shared.database import engine
 from bot.handlers import commands, photo, callbacks
 from bot.middlewares.user_management import UserManagementMiddleware
 from bot.middlewares.quota_check import QuotaCheckMiddleware
@@ -32,8 +31,7 @@ dp = Dispatcher(storage=RedisStorage.from_url(settings.redis_url))
 
 # Setup i18n
 i18n = I18n(path="bot/locales", default_locale="en", domain="messages")
-dp.message.middleware(CustomI18nMiddleware(i18n))
-dp.callback_query.middleware(CustomI18nMiddleware(i18n))
+dp.update.middleware(CustomI18nMiddleware(i18n))
 
 
 # Register global middlewares (order matters!)
