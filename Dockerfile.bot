@@ -2,24 +2,26 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Ensure uv uses system Python 3.11
+ENV UV_PYTHON_PREFERENCE=only-system
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv (fast Python package manager)
+# Install uv
 RUN pip install --no-cache-dir uv
 
-# Copy dependency files first for caching
+# Copy dependency files
 COPY pyproject.toml uv.lock* ./
 
-# Install dependencies (using uv)
+# Install dependencies using system Python
 RUN uv sync --frozen --no-dev
 
 # Copy application code
 COPY shared/ ./shared/
 COPY bot/ ./bot/
 
-# Use uv to run the app (ensures proper environment)
 CMD ["uv", "run", "python", "-m", "bot.main"]

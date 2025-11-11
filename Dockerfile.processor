@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Ensure uv uses system Python 3.11
+ENV UV_PYTHON_PREFERENCE=only-system
+
 # Install system dependencies for image processing
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -26,5 +29,4 @@ RUN uv sync --frozen --no-dev
 COPY shared/ ./shared/
 COPY processor/ ./processor/
 
-# Use uv to run the worker
 CMD ["uv", "run", "python", "-m", "processor.worker"]
