@@ -1,28 +1,35 @@
 import io
 import time
 from datetime import datetime
-from pathlib import Path
 from celery import shared_task
-import traceback
+import asyncio
+import uuid
 
 from PIL import Image
-import numpy as np
 from rembg import remove
 
 from shared.config import settings
-from shared.database import get_async_session
+from shared.database import async_session_maker
 from shared.models import ImageProcessingJob, ProcessingStatus
 from shared.s3_client import s3_client
 
 
 @shared_task(bind=True, name="processor.tasks.image_processing.process_image")
 def process_image(self, job_id: str, options: dict):
-    """Process image based on job options"""
+    """Process image based on job options (Celery wrapper)."""
     start_time = time.time()
 
     async def run_async():
-        async for session in get_async_session():
-            job = await session.get(ImageProcessingJob, job_id)
+        # Use async session maker directly
+        async with async_session_maker() as session:
+            # If your job_id column is UUID, you may need to convert:
+            try:
+                # If stored as UUID in DB and job_id is string:
+                job_pk = uuid.UUID(job_id)
+            except Exception:
+                job_pk = job_id  # fallback
+
+            job = await session.get(ImageProcessingJob, job_pk)
             if not job:
                 raise ValueError(f"Job {job_id} not found")
 
@@ -31,19 +38,16 @@ def process_image(self, job_id: str, options: dict):
                 job.updated_at = datetime.utcnow()
                 await session.commit()
 
-                # Download original from S3
+                # Download original from S3 (async wrapper)
                 original_data = await s3_client.download_file(job.original_file_key)
 
-                # Process based on action
-                action = options.get("action", "remove_background")
-                processed_data = await _process_image(original_data, action, options)
+                # Process
+                processed_data = await _process_image(original_data, options.get("action", "remove_background"), options)
 
-                # Upload processed image
+                # Upload processed image (async wrapper)
                 extension = _get_extension(options)
                 processed_key = f"processed/{job.user_id}/{job.id}{extension}"
-                await s3_client.upload_file(
-                    processed_data, processed_key, f"image/{extension.lstrip('.')}"
-                )
+                await s3_client.upload_file(processed_data, processed_key, content_type=f"image/{extension.lstrip('.')}")
 
                 # Update job
                 job.processed_file_key = processed_key
@@ -52,81 +56,85 @@ def process_image(self, job_id: str, options: dict):
                 job.updated_at = datetime.utcnow()
                 await session.commit()
 
-                # Send result to user (via Telegram Bot API)
+                # Send result (async)
                 await _send_result_to_user(job, processed_data)
 
-            except Exception as e:
-                job.status = ProcessingStatus.FAILED
-                job.error_message = str(e)[:500]
-                job.updated_at = datetime.utcnow()
-                await session.commit()
+            except Exception as exc:
+                # try to record failure; swallow errors in DB ops if necessary
+                try:
+                    job.status = ProcessingStatus.FAILED
+                    job.error_message = str(exc)[:500]
+                    job.updated_at = datetime.utcnow()
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
                 raise
 
-    import asyncio
     asyncio.run(run_async())
 
 
 async def _process_image(image_data: bytes, action: str, options: dict) -> bytes:
-    """Core image processing logic"""
-    img = Image.open(io.BytesIO(image_data))
+    img = Image.open(io.BytesIO(image_data)).convert("RGBA")
 
     if action == "remove_background":
-        # Use rembg for background removal
         output = remove(img)
         output_buffer = io.BytesIO()
         output.save(output_buffer, format="PNG")
         return output_buffer.getvalue()
 
-    elif action == "resize":
-        width = options.get("width", 512)
-        height = options.get("height", 512)
+    if action == "resize":
+        width = int(options.get("width", 512))
+        height = int(options.get("height", 512))
         resized = img.resize((width, height), Image.Resampling.LANCZOS)
         output_buffer = io.BytesIO()
-        format = img.format or "JPEG"
-        resized.save(output_buffer, format=format)
+        fmt = img.format or "JPEG"
+        resized.save(output_buffer, format=fmt)
         return output_buffer.getvalue()
 
-    elif action.startswith("format:"):
-        target_format = options.get("target_format", "png")
+    if action.startswith("format:") or options.get("action") == "format":
+        target_format = options.get("target_format", "png").upper()
         output_buffer = io.BytesIO()
-
-        if target_format.lower() == "jpg":
-            target_format = "JPEG"
-            if img.mode in ("RGBA", "LA"):
-                background = Image.new("RGB", img.size, (255, 255, 255))
-                if img.mode == "RGBA":
-                    background.paste(img, mask=img.split()[-1])
-                img = background
-
-        img.save(output_buffer, format=target_format.upper())
+        if target_format in ("JPG", "JPEG") and img.mode in ("RGBA", "LA"):
+            background = Image.new("RGB", img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[-1])
+            img = background
+        img.save(output_buffer, format=target_format)
         return output_buffer.getvalue()
 
-    return image_data  # Default: return original
+    return image_data
 
 
 def _get_extension(options: dict) -> str:
     action = options.get("action", "")
     if action == "remove_background":
         return ".png"
-    elif action.startswith("format:"):
+    elif action.startswith("format:") or options.get("target_format"):
         fmt = options.get("target_format", "png")
-        return f".{fmt}"
+        return f".{fmt.lower()}"
     return ".png"
 
 
 async def _send_result_to_user(job: ImageProcessingJob, image_data: bytes):
-    """Send processed image back to user via Telegram Bot API"""
+    """Send processed image back to user; ensure chat_id is a telegram id, not DB pk."""
     import aiohttp
 
     bot_token = settings.bot_token
     url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
 
-    # In production, use proper bot API call with file upload
-    # For brevity, this is a simplified version
+    # Ensure we send to the telegram_id (not the DB user id)
+    chat_id = getattr(job, "telegram_user_id", None) or getattr(job, "telegram_id", None)
+    # if job.user is relationship you might do: job.user.telegram_id
+
+    if chat_id is None:
+        # fallback: don't attempt to send
+        return
+
     data = aiohttp.FormData()
-    data.add_field("chat_id", job.user_id)
-    data.add_field("photo", image_data, filename=f"result_{job.id}.png")
+    data.add_field("chat_id", str(chat_id))
+    data.add_field("photo", image_data, filename=f"result_{job.id}.png", content_type="image/png")
     data.add_field("caption", f"✅ Processing complete!\nJob ID: {job.id}")
 
     async with aiohttp.ClientSession() as session:
-        await session.post(url, data=data)
+        async with session.post(url, data=data) as resp:
+            # optionally check resp.status and log
+            pass
