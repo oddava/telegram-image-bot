@@ -10,15 +10,9 @@ from sqlalchemy import (
     Text,
     Enum as SQLEnum, BigInteger,
 )
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    # PostgreSQL UUID type
-    type_annotation_map = {
-        PyUUID: UUID(as_uuid=True),
-    }
+from shared.database import Base
 
 
 class UserTier(str, Enum):
@@ -35,8 +29,6 @@ class ProcessingStatus(str, Enum):
 
 
 class User(Base):
-    __tablename__ = "users"
-
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -54,8 +46,6 @@ class User(Base):
 
 
 class ImageProcessingJob(Base):
-    __tablename__ = "image_processing_jobs"
-
     id: Mapped[PyUUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)

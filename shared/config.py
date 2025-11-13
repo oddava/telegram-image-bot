@@ -1,18 +1,24 @@
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    ADMIN_ID: str
 
     # Bot
-    bot_token: str
+    bot_token: SecretStr
+    use_webhook: bool = False
     bot_webhook_url: str | None = None
     bot_secret_token: str | None = None
     bot_skip_updates: bool = True
 
     # Database
-    database_url: str
-    db_echo: bool = False
+    DATABASE_URL: SecretStr
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 50
+    DB_POOL_RECYCLE: int = 3600
+    DB_ECHO: bool = False
 
     # Redis
     redis_url: str
@@ -35,7 +41,17 @@ class Settings(BaseSettings):
 
     # Monitoring
     prometheus_port: int = 8000
-    log_level: str = "INFO"
+    log_level: str = "DEBUG"
+    debug: bool = True
+
+    # --- validators ---------------------------------------------------
+    @field_validator("DATABASE_URL")
+    def _async_pg(cls, v: SecretStr) -> SecretStr:
+        """Ensure we always return an asyncpg URL."""
+        url = v.get_secret_value()
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://")
+        return SecretStr(url)
 
     @property
     def max_file_size_bytes(self) -> int:

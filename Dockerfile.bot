@@ -2,10 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Ensure uv uses system Python 3.11
-ENV UV_PYTHON_PREFERENCE=only-system
-
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
@@ -17,11 +14,16 @@ RUN pip install --no-cache-dir uv
 # Copy dependency files
 COPY pyproject.toml uv.lock* ./
 
-# Install dependencies using system Python
+# Install dependencies (creates /app/.venv)
 RUN uv sync --frozen --no-dev
 
-# Copy application code
+# Copy application code (AFTER installing deps)
 COPY shared/ ./shared/
 COPY bot/ ./bot/
 
-CMD ["uv", "run", "python", "-m", "bot.main"]
+# Activate the virtual environment directly
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Use python directly (not uv run)
+CMD ["python", "-m", "bot.main"]

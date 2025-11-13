@@ -1,72 +1,63 @@
 import asyncio
-import logging
+
+import uvloop
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.utils.i18n import I18n
 
-from bot.middlewares.database import DatabaseMiddleware
-from bot.middlewares.i18n import CustomI18nMiddleware
+from bot.handlers import router
+from bot.middlewares import init_middlewares
 from shared.config import settings
-from shared.database import engine, async_session_maker
-from bot.handlers import commands, photo, callbacks
-from bot.middlewares.user_management import UserManagementMiddleware
-from bot.middlewares.quota_check import QuotaCheckMiddleware
-from shared.models import Base
+from shared.database import close_database, init_database, db
+from loguru import logger
 
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, settings.log_level),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Initialize bot
 bot = Bot(
-    token=settings.bot_token,
+    token=settings.bot_token.get_secret_value(),
     default=DefaultBotProperties(parse_mode="HTML"),
 )
 
-# Initialize dispatcher with Redis storage
 dp = Dispatcher(storage=RedisStorage.from_url(settings.redis_url))
 
-# Setup i18n
-i18n = I18n(path="bot/locales", default_locale="en", domain="messages")
-dp.update.middleware(CustomI18nMiddleware(i18n))
 
+async def on_startup():
+    await init_database(create_tables=True)
+    if not await db.health_check():
+        raise RuntimeError("DB not healthy")
+    init_middlewares(dp)
+    dp.include_router(router)
 
-dp.update.middleware(DatabaseMiddleware(async_session_maker))
+    bot_info = await bot.get_me()
+    logger.info(f"Name     - {bot_info.full_name}")
+    logger.info(f"Username - @{bot_info.username}")
+    logger.info(f"ID       - {bot_info.id}")
 
-# Register global middlewares (order matters!)
-dp.update.middleware(UserManagementMiddleware())
+    states = {
+        True: "Enabled",
+        False: "Disabled",
+        None: "Unknown (Not a bot)",
+    }
 
+    logger.info(f"Groups Mode  - {states[bot_info.can_join_groups]}")
+    logger.info(f"Privacy Mode - {states[not bot_info.can_read_all_group_messages]}")
+    logger.info(f"Inline Mode  - {states[bot_info.supports_inline_queries]}")
 
-# Register quota middleware only for specific routers
-photo.router.message.middleware(QuotaCheckMiddleware())
-photo.router.callback_query.middleware(QuotaCheckMiddleware())
-callbacks.router.callback_query.middleware(QuotaCheckMiddleware())
+async def on_shutdown():
+    """Clean shutdown"""
+    logger.info("Shutting down bot...")
+    await close_database()
+    await bot.delete_webhook(drop_pending_updates=False)
 
-# Register routers
-dp.include_router(commands.router)
-dp.include_router(photo.router)
-dp.include_router(callbacks.router)
-
-
-async def setup_database():
-    """Initialize database tables"""
-    logger.info("Setting up database...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database setup complete!")
+    await bot.session.close()
+    logger.success("✅ Bot stopped successfully")
 
 
 async def main():
-    await setup_database()
     logger.info("🚀 Bot starting...")
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
 
     # Configure webhook or polling
-    if settings.bot_webhook_url:
-        # Webhook mode (production)
+    if settings.use_webhook:
         from aiogram.webhook.aiohttp_server import SimpleRequestHandler
         from aiohttp import web
 
@@ -76,13 +67,17 @@ async def main():
         SimpleRequestHandler(
             dispatcher=dp,
             bot=bot,
+            handle_in_background=True,
             secret_token=settings.bot_secret_token,
         ).register(app, path=webhook_path)
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, host="0.0.0.0", port=8080)
+        site = web.TCPSite(runner, host="0.0.0.0", port=8443)
         await site.start()
+
+        full_webhook_url = f"{settings.bot_webhook_url}{webhook_path}"
+        logger.info(f"Attempting to set webhook to: '{full_webhook_url}'")
 
         await bot.set_webhook(
             url=f"{settings.bot_webhook_url}{webhook_path}",
@@ -91,7 +86,6 @@ async def main():
         )
         logger.info(f"Webhook set to: {settings.bot_webhook_url}{webhook_path}")
 
-        # Keep running
         await asyncio.Event().wait()
     else:
         # Polling mode (development)
@@ -105,6 +99,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        uvloop.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped!")

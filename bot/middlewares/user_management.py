@@ -4,10 +4,9 @@ import logging
 
 from aiogram import BaseMiddleware
 from aiogram.types import Update, User as TelegramUser
-from aiogram.utils.i18n import gettext as _
 from sqlalchemy import select
 
-from shared.database import async_session_maker
+from shared.database import db
 from shared.models import User, UserTier
 from shared.config import settings
 
@@ -39,7 +38,7 @@ class UserManagementMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         # Get or create user in database
-        async with async_session_maker() as session:
+        async with db.session() as session:
             result = await session.execute(select(User).where(User.telegram_id == telegram_user.id))
             user = result.scalar_one_or_none()
 
@@ -48,7 +47,7 @@ class UserManagementMiddleware(BaseMiddleware):
                     telegram_id=telegram_user.id,
                     username=telegram_user.username,
                     full_name=telegram_user.full_name or telegram_user.username or "User",
-                    tier=UserTier.FREE,
+                    tier=UserTier.ADMIN if telegram_user.id == settings.ADMIN_ID else UserTier.FREE,
                     quota_limit=settings.default_quota_free,
                     quota_used=0,
                     created_at=datetime.now(timezone.utc),
@@ -60,14 +59,6 @@ class UserManagementMiddleware(BaseMiddleware):
                     await session.commit()
                     await session.refresh(user)
                     logger.info(f"✅ New user registered: {user.telegram_id} (@{user.username})")
-
-                    if event.message:
-                        await event.message.answer(
-                            _(
-                                "👋 Welcome! You have {quota} free image processing credits.\n\n"
-                                "Send me an image to get started!"
-                            ).format(quota=settings.default_quota_free)
-                        )
                 except Exception as e:
                     await session.rollback()
                     logger.error(f"Failed to create user: {e}")

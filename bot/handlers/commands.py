@@ -12,7 +12,7 @@ router = Router(name="commands")
 async def cmd_start(message: types.Message, user: User):
     # user is guaranteed to exist, since middleware creates it
     await message.answer(
-        _("👋 Welcome back, {name}! You have {remaining} credits remaining.").format(
+        _("👋 Hello, {name}! You have {remaining} credits remaining.").format(
             name=user.full_name,
             remaining=user.quota_limit - user.quota_used
         )
@@ -37,8 +37,6 @@ async def cmd_help(message: types.Message):
             "<b>Features:</b>\n"
             "• Background removal\n"
             "• Format conversion (JPG, PNG, WebP)\n"
-            "• Image resizing\n"
-            "• Batch processing\n\n"
             "<b>Usage:</b>\n"
             "1. Send an image\n"
             "2. Choose processing options\n"

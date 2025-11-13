@@ -23,7 +23,11 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock* ./
 
 # Install dependencies
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev && \
+    uv pip install --no-cache onnxruntime
+
+RUN useradd --create-home --shell /bin/bash worker
+USER worker
 
 RUN uv pip install --no-cache onnxruntime
 

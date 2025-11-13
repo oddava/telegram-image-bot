@@ -1,10 +1,16 @@
+import asyncio
 import os
 from celery import Celery
 from shared.config import settings
+from shared.database import db
+
+
+asyncio.run(db.init(settings.DATABASE_URL.get_secret_value()))
 
 # Configure Celery
 celery_app = Celery("processor")
 celery_app.conf.update(
+    broker_connection_retry_on_startup=True,
     broker_url=settings.celery_broker_url,
     result_backend=settings.celery_result_backend,
     task_serializer="json",
@@ -21,6 +27,7 @@ celery_app.conf.update(
         "processor.tasks.image_processing",
     ],
 )
+
 
 if __name__ == "__main__":
     os.environ.setdefault("CELERY_WORKER_NAME", "image-processor")
