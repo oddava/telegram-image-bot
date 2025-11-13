@@ -161,7 +161,7 @@ async def handle_photo(
         session: AsyncSession,
 ):
     """Handle photo messages"""
-    photo = message.photo[-1]  # Get highest quality
+    photo = message.photo[-1]
 
     await handle_image_upload(
         message=message,

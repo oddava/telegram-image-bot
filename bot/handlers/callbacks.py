@@ -107,10 +107,8 @@ async def handle_process_start(
         session: AsyncSession,
 ) -> None:
     """Handle process start button click"""
-    # Get current options
     options = await get_job_options(job)
 
-    # Check if at least one option is selected
     if not options.get("remove_bg") and not options.get("as_sticker"):
         await callback.answer("⚠️ Please select at least one option!", show_alert=True)
         return

@@ -10,7 +10,6 @@ router = Router(name="commands")
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, user: User):
-    # user is guaranteed to exist, since middleware creates it
     await message.answer(
         _("👋 Hello, {name}! You have {remaining} credits remaining.").format(
             name=user.full_name,
