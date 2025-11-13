@@ -131,6 +131,11 @@ async def handle_image_upload(
     # Create processing job
     job = await create_processing_job(session, user, filename, original_key)
 
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
     # Check if this is part of a media group (album)
     if media_group_id:
         await message.answer(
