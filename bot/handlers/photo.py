@@ -114,7 +114,7 @@ async def handle_image_upload(
         return
 
     # Download image
-    await message.answer(_("📥 Downloading image..."))
+    download_msg = await message.answer(_("📥 Downloading image..."))
     file_info = await bot.get_file(file_id)
     image_data = await download_telegram_file(file_info, bot)
     logger.info(f"Downloaded image: {len(image_data)} bytes")
@@ -131,13 +131,9 @@ async def handle_image_upload(
     # Create processing job
     job = await create_processing_job(session, user, filename, original_key)
 
-    try:
-        await message.delete()
-    except Exception:
-        pass
-
     # Check if this is part of a media group (album)
     if media_group_id:
+        await download_msg.delete()
         await message.answer(
             _("✅ Image received (album)! Use /history to process.\nJob ID: {job_id}").format(
                 job_id=job.id
@@ -151,6 +147,10 @@ async def handle_image_upload(
             caption=_("🎨 Choose processing options (toggle buttons, then press Process):"),
             reply_markup=keyboard,
         )
+        try:
+            await download_msg.delete()
+        except Exception:
+            pass
 
 
 @router.message(F.photo)
