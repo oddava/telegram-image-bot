@@ -149,6 +149,11 @@ async def handle_process_start(
 
     status_text = " + ".join(status_parts)
 
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
     await callback.message.answer(
         _("✅ Processing started: {status}\n\n"
           "Job ID: {job_id}\n"
