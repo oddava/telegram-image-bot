@@ -124,7 +124,7 @@ async def handle_process_start(
         return
 
     # Increment quota
-    if user.telegram_id != settings.ADMIN_ID:
+    if user.tier.value != "admin":
         db_user.quota_used += 1
 
     # Update job

@@ -1,21 +1,26 @@
-import logging
+import asyncio
+import time
 import uuid
 from datetime import datetime, timezone
 from io import BytesIO
+from typing import Optional
 
 from aiogram import Router, F, Bot
 from aiogram.types import BufferedInputFile, Message, File, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.i18n import gettext as _
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.config import settings
 from shared.models import User, ImageProcessingJob, ProcessingStatus
 from shared.s3_client import s3_client
+from loguru import logger
+from aiogram.utils.i18n import gettext as _
 
 router = Router(name="photo")
 router.message.filter(F.photo | F.document)
 
-logger = logging.getLogger(__name__)
+# Track media groups to avoid duplicate messages
+media_group_tracker = {}  # {media_group_id: (timestamp, job_count)}
 
 
 async def download_telegram_file(file: File, bot: Bot) -> bytes:
@@ -107,50 +112,96 @@ async def handle_image_upload(
         file_size: int,
         filename: str,
         media_group_id: str = None,
-) -> None:
+) -> Optional[ImageProcessingJob]:
     """Common logic for handling image uploads"""
+    from aiogram.utils.i18n import gettext as _
+
     # Check file size
     if not await check_file_size(message, file_size):
-        return
+        return None
 
-    # Download image
-    download_msg = await message.answer(_("📥 Downloading image..."))
-    file_info = await bot.get_file(file_id)
-    image_data = await download_telegram_file(file_info, bot)
-    logger.info(f"Downloaded image: {len(image_data)} bytes")
-
-    # Generate S3 key
-    original_key = f"original/{user.telegram_id}/{uuid.uuid4()}.jpg"
-
-    # Upload to S3
-    try:
-        await upload_to_s3(image_data, original_key)
-    except Exception as e:
-        return await message.answer(f"❌ Failed to upload image: {str(e)}")
-
-    # Create processing job
-    job = await create_processing_job(session, user, filename, original_key)
-
-    # Check if this is part of a media group (album)
+    # Track media groups and determine if this is the first image
+    is_first_in_group = False
     if media_group_id:
-        await download_msg.delete()
-        await message.answer(
-            _("✅ Image received (album)! Use /history to process.\nJob ID: {job_id}").format(
-                job_id=job.id
+        current_time = time.time()
+
+        # Initialize or update tracker
+        if media_group_id not in media_group_tracker:
+            media_group_tracker[media_group_id] = {
+                'count': 0,
+                'timestamp': current_time
+            }
+            is_first_in_group = True
+
+        tracker = media_group_tracker[media_group_id]
+        tracker['count'] += 1
+        tracker['timestamp'] = current_time
+
+        # Clean up old entries (older than 5 seconds)
+        to_remove = [k for k, v in media_group_tracker.items()
+                     if current_time - v['timestamp'] > 5]
+        for k in to_remove:
+            del media_group_tracker[k]
+
+    # Only show download status for single images or first album image
+    download_msg = None
+    if not media_group_id or is_first_in_group:
+        status_text = _("📥 Downloading album...") if media_group_id else _("📥 Downloading image...")
+        download_msg = await message.answer(status_text)
+
+    try:
+        # Download image
+        file_info = await bot.get_file(file_id)
+        image_data = await download_telegram_file(file_info, bot)
+        logger.info(f"Downloaded image: {len(image_data)} bytes")
+
+        # Generate S3 key
+        original_key = f"original/{user.telegram_id}/{uuid.uuid4()}.jpg"
+
+        # Upload to S3
+        await upload_to_s3(image_data, original_key)
+
+        # Create processing job
+        job = await create_processing_job(session, user, filename, original_key)
+
+        # Handle messaging based on album/single image
+        if media_group_id:
+            # Only send album message for the first image
+            if is_first_in_group:
+                # Wait briefly to collect most images
+                await asyncio.sleep(0.5)
+                count = media_group_tracker[media_group_id]['count']
+
+                if download_msg:
+                    await download_msg.delete()
+
+                await message.answer(
+                    _("📸 Album detected! Processing {count} images...\n"
+                      "Use /history to process them all at once.").format(count=count))
+            return None
+        else:
+            # Single image - show interactive preview
+            keyboard = create_processing_keyboard(job.id)
+            await message.answer_photo(
+                photo=BufferedInputFile(image_data, filename="preview.jpg"),
+                caption=_("🎨 Choose processing options (toggle buttons, then press Process):"),
+                reply_markup=keyboard,
             )
-        )
-    else:
-        # Single image - show interactive options
-        keyboard = create_processing_keyboard(job.id)
-        await message.answer_photo(
-            photo=BufferedInputFile(image_data, filename="preview.jpg"),
-            caption=_("🎨 Choose processing options (toggle buttons, then press Process):"),
-            reply_markup=keyboard,
-        )
-        try:
+            return job
+
+    except Exception as e:
+        # Clean up on error
+        if download_msg:
             await download_msg.delete()
-        except Exception:
-            pass
+        return await message.answer(f"❌ Failed to process image: {str(e)}")
+
+    finally:
+        # Always clean up download message for single images
+        if download_msg and not media_group_id:
+            try:
+                await download_msg.delete()
+            except Exception:
+                pass
 
 
 @router.message(F.photo)
