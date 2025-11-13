@@ -5,6 +5,7 @@ from aiogram import Router
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.config import settings
 from shared.models import User, ImageProcessingJob, ProcessingStatus
 from bot.services.task_publisher import publish_processing_task
 from aiogram.utils.i18n import gettext as _
@@ -125,7 +126,8 @@ async def handle_process_start(
         return
 
     # Increment quota
-    db_user.quota_used += 1
+    if user.telegram_id != settings.ADMIN_ID:
+        db_user.quota_used += 1
 
     # Update job
     job.processing_options = json.dumps(options)

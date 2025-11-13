@@ -17,7 +17,7 @@ class QuotaCheckMiddleware(BaseMiddleware):
     ) -> Any:
         user: User | None = data.get("user")
 
-        if not user or user.tier in {"admin", "premium"}:
+        if not user or user.tier in {"ADMIN", "PREMIUM"}:
             return await handler(event, data)
 
         if isinstance(event, Message) and (event.photo or event.document):

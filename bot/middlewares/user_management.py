@@ -1,6 +1,5 @@
 from typing import Callable, Dict, Any, Awaitable
 from datetime import datetime, timezone
-import logging
 
 from aiogram import BaseMiddleware
 from aiogram.types import Update, User as TelegramUser
@@ -9,8 +8,7 @@ from sqlalchemy import select
 from shared.database import db
 from shared.models import User, UserTier
 from shared.config import settings
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class UserManagementMiddleware(BaseMiddleware):
