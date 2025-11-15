@@ -54,42 +54,46 @@ async def on_shutdown():
 
 async def main():
     logger.info("🚀 Bot starting...")
-    dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
 
-    # Configure webhook or polling
     if settings.use_webhook:
-        from aiogram.webhook.aiohttp_server import SimpleRequestHandler
         from aiohttp import web
+        from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
         app = web.Application()
-        if settings.bot_secret_token and settings.bot_secret_token.strip():
-            webhook_path = "/" + settings.bot_secret_token.strip()
-        else:
-            webhook_path = "/webhook"
+
+        webhook_path = (
+            f"/{settings.bot_secret_token.strip()}"
+            if settings.bot_secret_token and settings.bot_secret_token.strip()
+            else "/webhook"
+        )
 
         logger.warning(f"Webhook PATH registered: {repr(webhook_path)}")
+
+        # register dispatcher+bot handling this route
         SimpleRequestHandler(
-            dispatcher=dp,
             bot=bot,
+            dispatcher=dp,
             handle_in_background=True,
         ).register(app, path=webhook_path)
 
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, host="0.0.0.0", port=8443)
-        await site.start()
-
         full_webhook_url = f"{settings.bot_webhook_url}{webhook_path}"
-        logger.info(f"Attempting to set webhook to: '{full_webhook_url}'")
+        logger.info(f"Setting webhook to: {full_webhook_url}")
 
         await bot.set_webhook(
-            url=f"{settings.bot_webhook_url}{webhook_path}",
+            url=full_webhook_url,
             allowed_updates=["message", "callback_query"],
         )
-        logger.info(f"Webhook set to: {settings.bot_webhook_url}{webhook_path}")
 
-        await asyncio.Event().wait()
+        # run db + middleware setup before serving
+        await on_startup()
+
+        setup_application(app, dp, bot)
+
+        # run aiohttp server forever
+        try:
+            web.run_app(app, host="0.0.0.0", port=8443)
+        finally:
+            dp.shutdown.register(on_shutdown)
     else:
         # Polling mode (development)
         logger.info("Starting polling mode...")
