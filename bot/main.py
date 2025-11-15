@@ -41,6 +41,7 @@ async def on_startup():
     logger.info(f"Privacy Mode - {states[not bot_info.can_read_all_group_messages]}")
     logger.info(f"Inline Mode  - {states[bot_info.supports_inline_queries]}")
 
+
 async def on_shutdown():
     """Clean shutdown"""
     logger.info("Shutting down bot...")
@@ -62,8 +63,12 @@ async def main():
         from aiohttp import web
 
         app = web.Application()
-        webhook_path = f"/{settings.bot_secret_token}" if settings.bot_secret_token else "/webhook"
+        if settings.bot_secret_token and settings.bot_secret_token.strip():
+            webhook_path = "/" + settings.bot_secret_token.strip()
+        else:
+            webhook_path = "/webhook"
 
+        logger.warning(f"Webhook PATH registered: {repr(webhook_path)}")
         SimpleRequestHandler(
             dispatcher=dp,
             bot=bot,
