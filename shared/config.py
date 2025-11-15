@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Bot
     bot_token: SecretStr
-    use_webhook: bool = False
+    use_webhook: bool | None = None
     bot_webhook_url: str | None = None
     bot_secret_token: str | None = None
     bot_skip_updates: bool = True
@@ -35,7 +35,6 @@ class Settings(BaseSettings):
 
     # Processing
     max_file_size_mb: int = 20
-    supported_formats: str = "jpg,jpeg,png,webp,tiff"
     default_quota_free: int = 10
     default_quota_premium: int = 1000
 

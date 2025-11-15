@@ -7,7 +7,6 @@ from aiogram.utils.i18n import gettext as _
 from sqlalchemy import select, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.config import settings
 from shared.models import User, ImageProcessingJob, ProcessingStatus
 
 router = Router(name="history")
