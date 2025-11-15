@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Bot
     bot_token: SecretStr
-    use_webhook: bool = True
+    use_webhook: bool | None = None
     bot_webhook_url: str | None = None
     bot_secret_token: str | None = None
     bot_skip_updates: bool = True

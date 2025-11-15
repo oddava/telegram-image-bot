@@ -85,7 +85,7 @@ async def main():
         await site.start()
 
         # Set webhook with HTTPS URL and secret token
-        full_webhook_url = f"{settings.bot_webhook_url}{webhook_path}"
+        full_webhook_url = f"{settings.bot_webhook_url.strip()}{webhook_path}"
         logger.info(f"Setting webhook to: {full_webhook_url}")
 
         await bot.set_webhook(
