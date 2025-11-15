@@ -66,6 +66,13 @@ async def main():
 
         webhook_path = "/webhook"
 
+        # Add simple health check
+        async def health_check(request):
+            logger.info("🩺 Health check pinged!")
+            return web.json_response({"status": "alive"})
+
+        app.router.add_get("/health", health_check)
+
         # Create handler WITH secret token for security
         # Telegram will send this token in the X-Telegram-Bot-Api-Secret-Token header
         SimpleRequestHandler(
@@ -87,6 +94,8 @@ async def main():
         # Set webhook with HTTPS URL and secret token
         full_webhook_url = f"{settings.bot_webhook_url.strip()}{webhook_path}"
         logger.info(f"Setting webhook to: {full_webhook_url}")
+
+        await on_startup()
 
         await bot.set_webhook(
             url=full_webhook_url,
