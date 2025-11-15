@@ -6,13 +6,15 @@ import requests
 from celery import shared_task
 
 from PIL import Image
-from rembg import remove
+from withoutbg import WithoutBG
 
 from shared.config import settings
 from shared.database import db
 from shared.models import ImageProcessingJob, ProcessingStatus, User
 from shared.s3_client import s3_client
 
+# Initialize the bg remover model
+model = WithoutBG.opensource()
 
 @shared_task(bind=True, name="processor.tasks.image_processing.process_image")
 def process_image(self, job_id: str, options: dict):
@@ -88,7 +90,7 @@ def _process_image_data(image_data: bytes, options: dict) -> bytes:
 
     # Remove background if requested
     if remove_bg:
-        img = remove(img)
+        img = model.remove_background(img)
 
     # Convert to sticker format if requested
     if as_sticker:

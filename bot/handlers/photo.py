@@ -193,7 +193,8 @@ async def handle_image_upload(
         # Clean up on error
         if download_msg:
             await download_msg.delete()
-        return await message.answer(f"❌ Failed to process image: {str(e)}")
+            logger.error(f"Image processing failed for user {user.id}: {e}", exc_info=True)
+            return await message.answer(_("❌ Processing failed. Please try again."))
 
     finally:
         # Always clean up download message for single images
