@@ -90,7 +90,7 @@ async def main():
 
         await bot.set_webhook(
             url=full_webhook_url,
-            secret_token=settings.bot_secret_token.get_secret_value(),
+            secret_token=settings.bot_secret_token,
             allowed_updates=["message", "callback_query"],
         )
         logger.success("✅ Webhook set successfully")
