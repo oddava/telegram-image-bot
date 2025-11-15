@@ -73,7 +73,6 @@ async def main():
             dispatcher=dp,
             bot=bot,
             handle_in_background=True,
-            secret_token=settings.bot_secret_token,
         ).register(app, path=webhook_path)
 
         runner = web.AppRunner(app)
@@ -86,7 +85,6 @@ async def main():
 
         await bot.set_webhook(
             url=f"{settings.bot_webhook_url}{webhook_path}",
-            secret_token=settings.bot_secret_token,
             allowed_updates=["message", "callback_query"],
         )
         logger.info(f"Webhook set to: {settings.bot_webhook_url}{webhook_path}")
