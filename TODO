@@ -1,6 +1,6 @@
 ## Features Implemented
 
-✅ **Core Features**
+Core Features
 - Background removal (using `rembg`)
 - User quotas & tracking
 - Processing history in DB
@@ -9,7 +9,7 @@
 - Task queue with Celery + Redis
 - Multiple processing workers
 
-✅ **Architecture**
+Architecture
 - Microservices separation (Bot ↔ Processor)
 - Async PostgreSQL with SQLAlchemy
 - Docker containerization
@@ -17,7 +17,6 @@
 - Automatic database migrations
 - Environment-based configuration
 
-✅ **Production Ready**
 - Error handling & retries
 - Input validation
 - Rate limiting via quotas
