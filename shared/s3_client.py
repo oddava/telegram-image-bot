@@ -19,7 +19,7 @@ class S3Client:
         self.bucket_name = settings.minio_bucket_name
         self.public_url = settings.minio_public_url
         self.executor = ThreadPoolExecutor(max_workers=4)
-        self._bucket_checked = False  # ✅ Add flag
+        self._bucket_checked = False
 
     def _ensure_bucket(self):
         """Ensure bucket exists - called lazily on first use"""
@@ -91,4 +91,4 @@ class S3Client:
         )
 
 
-s3_client = S3Client()  # ✅ Now safe to import
+s3_client = S3Client()

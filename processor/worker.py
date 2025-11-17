@@ -21,8 +21,8 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_track_started=True,
-    task_time_limit=300,  # 5 minutes
-    task_soft_time_limit=270,  # 4.5 minutes
+    task_time_limit=300,
+    task_soft_time_limit=270,
     imports=[
         "processor.tasks.image_processing",
     ],
