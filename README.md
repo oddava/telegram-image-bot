@@ -41,7 +41,7 @@ A scalable Telegram bot for image processing with background removal, built with
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/oddava/telegram-image-bot
    cd telegram-image-bot
    ```
 
