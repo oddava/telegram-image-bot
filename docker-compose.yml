@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:15-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-postgres
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -16,6 +17,7 @@ services:
       retries: 5
 
   redis:
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -30,6 +32,7 @@ services:
 
   minio:
     image: minio/minio:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-minio
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -66,7 +69,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       MINIO_ENDPOINT: minio:9000
-    ports: []
+    ports:
+      - ${WEBHOOK_PORT}:${WEBHOOK_PORT}
     restart: unless-stopped
 
   processor:
@@ -92,10 +96,11 @@ services:
       - ./shared:/app/shared
     restart: unless-stopped
     deploy:
-      replicas: 2  # Scale processing workers
+      replicas: 2
+
   caddy:
     image: caddy:2
-    container_name: caddy
+    container_name: ${COMPOSE_PROJECT_NAME}-caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -107,6 +112,81 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
+  migrator:
+      build:
+        context: .
+        dockerfile: Dockerfile.bot
+      container_name: ${COMPOSE_PROJECT_NAME}-migrator
+      restart: "on-failure"
+      command: alembic upgrade head
+      env_file:
+        - .env
+      depends_on:
+        bot:
+          condition: service_started
+      volumes:
+        - ./migrations:/usr/src/app/migrations
+        - ./alembic.ini:/usr/src/app/alembic.ini
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    networks:
+      - monitoring
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    networks:
+      - default
+      - monitoring
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    depends_on:
+      - node-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./configs/grafana/node-exporter.json:/var/lib/grafana/dashboards/node-exporter.json
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    user: "472"
 
 volumes:
   postgres_data:
@@ -114,8 +194,12 @@ volumes:
   minio_data:
   caddy_data:
   caddy_config:
+  prometheus_data:
+  grafana_data:
 
 networks:
   default:
     name: image-bot-network
+    driver: bridge
+  monitoring:
     driver: bridge

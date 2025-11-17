@@ -20,6 +20,8 @@ RUN uv sync --frozen --no-dev
 # Copy application code (AFTER installing deps)
 COPY shared/ ./shared/
 COPY bot/ ./bot/
+COPY alembic.ini .
+COPY migrations/ ./migrations/
 
 # Activate the virtual environment directly
 ENV VIRTUAL_ENV=/app/.venv

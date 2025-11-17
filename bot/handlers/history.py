@@ -380,7 +380,7 @@ async def handle_batch_options(
     db_user = await session.get(User, user.id)
     remaining = db_user.quota_limit - db_user.quota_used
 
-    if remaining < len(pending_jobs) and user.tier.value != "admin":
+    if remaining < len(pending_jobs):
         await callback.answer(
             f"❌ Not enough credits! Need {len(pending_jobs)}, have {remaining}",
             show_alert=True

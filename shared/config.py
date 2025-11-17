@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     # Bot
     bot_token: SecretStr
     use_webhook: bool | None = None
+    webhook_port: int | None = None
     bot_webhook_url: str | None = None
     bot_secret_token: str | None = None
     bot_skip_updates: bool = True
@@ -43,14 +44,6 @@ class Settings(BaseSettings):
     log_level: str = "DEBUG"
     debug: bool = True
 
-    # --- validators ---------------------------------------------------
-    @field_validator("DATABASE_URL")
-    def _async_pg(cls, v: SecretStr) -> SecretStr:
-        """Ensure we always return an asyncpg URL."""
-        url = v.get_secret_value()
-        if url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+asyncpg://")
-        return SecretStr(url)
 
     @property
     def max_file_size_bytes(self) -> int:

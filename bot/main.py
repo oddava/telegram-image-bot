@@ -6,7 +6,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage
 
 from bot.handlers import router
+from bot.handlers.metrics import MetricsView
 from bot.middlewares import init_middlewares
+from bot.middlewares.prometheus import prometheus_middleware_factory
 from shared.config import settings
 from shared.database import close_database, init_database, db
 from loguru import logger
@@ -73,8 +75,9 @@ async def main():
 
         app.router.add_get("/health", health_check)
 
-        # Create handler WITH secret token for security
-        # Telegram will send this token in the X-Telegram-Bot-Api-Secret-Token header
+        app.middlewares.append(prometheus_middleware_factory())
+        app.router.add_route("GET", "/metrics", MetricsView)
+
         SimpleRequestHandler(
             dispatcher=dp,
             bot=bot,
