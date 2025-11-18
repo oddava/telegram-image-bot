@@ -12,7 +12,7 @@ from shared.database import Base
 # access to the values within the .ini file in use.
 config = context.config
 
-database_url = str(settings.DATABASE_URL.get_secret_value())
+database_url = str(settings.DATABASE_URL)
 database_url = database_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
 
 config.set_main_option("sqlalchemy.url", database_url)

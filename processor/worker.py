@@ -5,7 +5,7 @@ from shared.config import settings
 from shared.database import db
 
 
-asyncio.run(db.init(settings.DATABASE_URL.get_secret_value()))
+asyncio.run(db.init(settings.DATABASE_URL))
 
 # Configure Celery
 celery_app = Celery("processor")

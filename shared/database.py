@@ -261,7 +261,7 @@ async def init_database(
         create_tables: bool = True,
 ) -> None:
     """Initialize database system."""
-    url = database_url or settings.DATABASE_URL.get_secret_value()
+    url = database_url or settings.DATABASE_URL
 
     await db.init(
         database_url=url,
