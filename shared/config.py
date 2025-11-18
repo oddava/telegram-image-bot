@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     bot_skip_updates: bool = True
 
     # Database
-    DATABASE_URL: SecretStr
+    database_user: str | None = None
+    database_password: str | None = None
+    database_name: str | None = None
+    DATABASE_URL: SecretStr = f"postgresql+asyncpg://{database_user}:${database_password}@postgres:5432/${database_name}"
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 50
     DB_POOL_RECYCLE: int = 3600
