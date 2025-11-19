@@ -15,7 +15,7 @@ COPY shared/ ./shared/
 RUN pip install --no-cache-dir uv
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-group bot --no-group dev \
+    uv sync --frozen --no-install-project \
     && adduser -D appuser \
     && chown -R appuser:appuser .
 
