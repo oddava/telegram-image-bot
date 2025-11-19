@@ -187,6 +187,23 @@ services:
     depends_on:
       - prometheus
     user: "472"
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin
+    container_name: ${COMPOSE_PROJECT_NAME}-admin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+      DB_HOST: postgres
+      DATABASE_PORT: 5432
+      ADMIN_HOST: 0.0.0.0
+      ADMIN_PORT: 5000
+    restart: unless-stopped
 
 volumes:
   postgres_data:
