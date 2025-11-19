@@ -96,8 +96,6 @@ services:
       - ./processor:/app/processor
       - ./shared:/app/shared
     restart: unless-stopped
-    deploy:
-      replicas: 2
 
   caddy:
     image: caddy:2
