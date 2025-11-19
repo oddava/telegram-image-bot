@@ -167,7 +167,6 @@ admin = Admin(
         menu_icon_type=ICON_TYPE_FONT_AWESOME,
         menu_icon_value="fa-home",
     ),
-    template_mode="bootstrap4",
 )
 
 admin.add_view(
