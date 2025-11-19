@@ -1,7 +1,7 @@
-my-image-bot.duckdns.org {
+image-bot.duckdns.org {
     reverse_proxy /webhook* bot:8443
 }
 
-grafana.my-image-bot.duckdns.org {
+grafana.image-bot.duckdns.org {
     reverse_proxy grafana:3000
 }
