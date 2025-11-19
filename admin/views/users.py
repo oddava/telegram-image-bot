@@ -12,18 +12,22 @@ class UserView(ModelView):
     details_modal = True
     export_types = ["csv", "xlsx", "json", "yaml"]
 
-    column_searchable_list = ["id", "username", "first_name", "last_name"]
-    column_filters = ["is_admin", "is_suspicious", "is_block", "is_premium", "created_at"]
+    column_searchable_list = ["id", "telegram_id", "username", "first_name", "last_name", "email"]
+    column_filters = ["tier", "is_active", "created_at", "last_seen"]
     column_list = [
         "id",
+        "telegram_id",
         "username",
         "first_name",
         "last_name",
-        "language_code",
-        "is_admin",
-        "is_suspicious",
-        "is_block",
-        "is_premium",
+        "full_name",
+        "email",
+        "tier",
+        "quota_used",
+        "quota_limit",
+        "language",
+        "is_active",
         "created_at",
+        "last_seen",
     ]
     column_default_sort = ("created_at", True)

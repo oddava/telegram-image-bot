@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
+from typing import LiteralString
 from uuid import UUID as PyUUID, uuid4
 
 from sqlalchemy import (
@@ -8,7 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    Enum as SQLEnum, BigInteger,
+    Enum as SQLEnum, BigInteger, Boolean,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,26 +28,105 @@ class ProcessingStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+class UserStatus(str, Enum):
+    ACTIVE = "active"
+    BLOCKED = "blocked"
+    SUSPENDED = "suspended"
+
 
 class User(Base):
+    __tablename__ = "users"
+
+    # Primary identifiers
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
-    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    telegram_id: Mapped[int] = mapped_column(
+        BigInteger,
+        unique=True,
+        nullable=False,
+        index=True,
+        comment="Telegram user ID"
+    )
+
+    # User profile information
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    tier: Mapped[UserTier] = mapped_column(SQLEnum(UserTier), default=UserTier.FREE, nullable=False)
-    quota_used: Mapped[int] = mapped_column(default=0, nullable=False)
-    quota_limit: Mapped[int] = mapped_column(default=10, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     language: Mapped[str] = mapped_column(String(10), default="en", nullable=False)
-    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
-    # Relationships
-    jobs: Mapped[list["ImageProcessingJob"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    # Subscription and quota management
+    tier: Mapped[UserTier] = mapped_column(
+        SQLEnum(UserTier),
+        default=UserTier.FREE,
+        nullable=False,
+        index=True
+    )
+    quota_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    quota_limit: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
 
+    # Status and permissions
+    status: Mapped[UserStatus] = mapped_column(
+        SQLEnum(UserStatus),
+        default=UserStatus.ACTIVE,
+        nullable=False,
+        index=True
+    )
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    is_suspicious: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    # Computed properties
+    @property
+    def full_name(self) -> LiteralString | str | None:
+        """Generate full name from first and last name"""
+        parts = [self.first_name, self.last_name]
+        return " ".join(filter(None, parts)) or self.username or f"User {self.telegram_id}"
+
+    @property
+    def is_active(self) -> bool:
+        """Check if user is active"""
+        return self.status == UserStatus.ACTIVE
+
+    @property
+    def is_blocked(self) -> bool:
+        """Check if user is blocked"""
+        return self.status == UserStatus.BLOCKED
+
+    @property
+    def quota_percentage(self) -> float:
+        """Calculate quota usage percentage"""
+        if self.quota_limit == 0:
+            return 0.0
+        return (self.quota_used / self.quota_limit) * 100
+
+    @property
+    def is_quota_exceeded(self) -> bool:
+        """Check if user has exceeded quota"""
+        return self.quota_used >= self.quota_limit
+
+    def __repr__(self) -> str:
+        return f"<User(id={self.id}, telegram_id={self.telegram_id}, username={self.username})>"
+
+    def __str__(self) -> LiteralString | str | None:
+        return self.full_name
 
 class ImageProcessingJob(Base):
     id: Mapped[PyUUID] = mapped_column(primary_key=True, default=uuid4)
