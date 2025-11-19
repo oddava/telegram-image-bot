@@ -1,5 +1,5 @@
 image-bot.duckdns.org {
-    reverse_proxy /webhook* bot:8443
+    reverse_proxy bot:8443
 }
 
 grafana.image-bot.duckdns.org {
