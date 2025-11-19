@@ -53,6 +53,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.bot
+    container_name: ${COMPOSE_PROJECT_NAME}-bot
     depends_on:
       postgres:
         condition: service_healthy
