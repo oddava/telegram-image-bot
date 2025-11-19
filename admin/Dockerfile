@@ -11,12 +11,12 @@ COPY pyproject.toml uv.lock* ./
 COPY admin/ ./admin/
 COPY shared/ ./shared/
 
-# Install uv
 RUN pip install --no-cache-dir uv
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project \
-    && adduser -D appuser \
+    uv sync --frozen --no-install-project
+
+RUN adduser --disabled-password --gecos "" appuser \
     && chown -R appuser:appuser .
 
 USER appuser
