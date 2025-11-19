@@ -1,15 +1,10 @@
-FROM python:3.11-slim
-
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    PATH="/usr/src/app/.venv/bin:$PATH"
+FROM ghcr.io/astral-sh/uv:0.5-python3.13-alpine
 
 WORKDIR /usr/src/app
 
 COPY . .
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --group admin --no-group bot --no-group dev \
+RUN uv sync --frozen --no-install-project --group admin --no-group bot --no-group dev \
     && adduser -D appuser \
     && chown -R appuser:appuser .
 
