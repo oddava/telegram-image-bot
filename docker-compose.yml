@@ -177,7 +177,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_SERVER_ROOT_URL=https://grafana.my-image-bot.duckdns.org
+      - GF_SERVER_ROOT_URL=https://grafana.image-bot.duckdns.org
     volumes:
       - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources
       - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards
