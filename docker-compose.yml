@@ -188,7 +188,7 @@ services:
   admin:
     build:
       context: .
-      dockerfile: Dockerfile.admin
+      dockerfile: admin/Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME}-admin
     depends_on:
       postgres:
