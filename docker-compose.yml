@@ -185,6 +185,7 @@ services:
     depends_on:
       - prometheus
     user: "472"
+
   admin:
     build:
       context: .
