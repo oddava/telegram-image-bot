@@ -44,7 +44,7 @@ class UserManagementMiddleware(BaseMiddleware):
                 user = User(
                     telegram_id=telegram_user.id,
                     username=telegram_user.username,
-                    full_name=telegram_user.full_name or telegram_user.username or "User",
+                    full_name=telegram_user.first_name or telegram_user.username or "User",
                     tier=UserTier.ADMIN if telegram_user.id == settings.ADMIN_ID else UserTier.FREE,
                     quota_limit=settings.default_quota_free,
                     quota_used=0,
@@ -65,8 +65,8 @@ class UserManagementMiddleware(BaseMiddleware):
                 user.is_active = True
                 if user.username != telegram_user.username:
                     user.username = telegram_user.username
-                if user.full_name != (telegram_user.full_name or telegram_user.username or "User"):
-                    user.full_name = telegram_user.full_name or telegram_user.username or "User"
+                if user.first_name != (telegram_user.first_name or telegram_user.username or "User"):
+                    user.first_name = telegram_user.first_name or telegram_user.username or "User"
                 await session.commit()
 
             data["user"] = user

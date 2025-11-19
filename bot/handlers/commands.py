@@ -12,7 +12,7 @@ router = Router(name="commands")
 async def cmd_start(message: types.Message, user: User):
     await message.answer(
         _("👋 Hello, {name}! You have {remaining} credits remaining.").format(
-            name=user.full_name,
+            name=user.first_name,
             remaining=user.quota_limit - user.quota_used
         )
     )
