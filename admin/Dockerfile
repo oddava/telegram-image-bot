@@ -14,9 +14,8 @@ COPY shared/ ./shared/
 # Install uv
 RUN pip install --no-cache-dir uv
 
-# Sync dependencies and create .venv for Python 3.11
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --group admin --no-group bot --no-group dev \
+    uv sync --frozen --no-install-project --no-group bot --no-group dev \
     && adduser -D appuser \
     && chown -R appuser:appuser .
 
