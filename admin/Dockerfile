@@ -1,10 +1,22 @@
-FROM ghcr.io/astral-sh/uv:0.5-python3.13-alpine
+FROM python:3.11-slim
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_PREFERENCE=only-system \
+    PATH="/usr/src/app/.venv/bin:$PATH"
 
 WORKDIR /usr/src/app
 
-COPY . .
+COPY pyproject.toml uv.lock* ./
+COPY admin/ ./admin/
+COPY shared/ ./shared/
 
-RUN uv sync --frozen --no-install-project --group admin --no-group bot --no-group dev \
+# Install uv
+RUN pip install --no-cache-dir uv
+
+# Sync dependencies and create .venv for Python 3.11
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --group admin --no-group bot --no-group dev \
     && adduser -D appuser \
     && chown -R appuser:appuser .
 
