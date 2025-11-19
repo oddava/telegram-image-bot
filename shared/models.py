@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import LiteralString
+from typing import LiteralString, TYPE_CHECKING
 from uuid import UUID as PyUUID, uuid4
 
 from sqlalchemy import (
@@ -14,6 +14,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shared.database import Base
+
+if TYPE_CHECKING:
+    from shared.models import ImageProcessingJob
 
 
 class UserTier(str, Enum):
@@ -35,8 +38,6 @@ class UserStatus(str, Enum):
 
 
 class User(Base):
-    __tablename__ = "users"
-
     # Primary identifiers
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     telegram_id: Mapped[int] = mapped_column(
@@ -93,6 +94,9 @@ class User(Base):
         nullable=False
     )
 
+    # Relationships
+    jobs: Mapped[list["ImageProcessingJob"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
     # Computed properties
     @property
     def full_name(self) -> LiteralString | str | None:
@@ -127,6 +131,7 @@ class User(Base):
 
     def __str__(self) -> LiteralString | str | None:
         return self.full_name
+
 
 class ImageProcessingJob(Base):
     id: Mapped[PyUUID] = mapped_column(primary_key=True, default=uuid4)

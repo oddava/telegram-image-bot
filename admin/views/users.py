@@ -12,8 +12,12 @@ class UserView(ModelView):
     details_modal = True
     export_types = ["csv", "xlsx", "json", "yaml"]
 
+    # Exclude the jobs relationship
+    form_excluded_columns = ["jobs", "created_at", "updated_at"]
+    column_exclude_list = ["jobs"]
+
     column_searchable_list = ["id", "telegram_id", "username", "first_name", "last_name", "email"]
-    column_filters = ["tier", "is_active", "created_at", "last_seen"]
+    column_filters = ["tier", "status", "is_admin", "is_suspicious", "created_at", "last_seen"]
     column_list = [
         "id",
         "telegram_id",
@@ -23,10 +27,12 @@ class UserView(ModelView):
         "full_name",
         "email",
         "tier",
+        "status",
         "quota_used",
         "quota_limit",
         "language",
-        "is_active",
+        "is_admin",
+        "is_suspicious",
         "created_at",
         "last_seen",
     ]
