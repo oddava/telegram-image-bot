@@ -18,7 +18,7 @@ from sqlalchemy import inspect
 from wtforms import PasswordField
 
 from admin.views.users import UserView as AppUserView
-from bot.database.models import UserModel as AppUserModel
+from shared.models import User as AppUserModel
 
 if TYPE_CHECKING:
     from werkzeug.wrappers.response import Response
