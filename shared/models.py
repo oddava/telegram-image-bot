@@ -104,6 +104,10 @@ class User(Base):
         parts = [self.first_name, self.last_name]
         return " ".join(filter(None, parts)) or self.username or f"User {self.telegram_id}"
 
+    @full_name.setter
+    def full_name(self, value):
+        self._full_name = value
+
     @property
     def is_active(self) -> bool:
         """Check if user is active"""
