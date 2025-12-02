@@ -113,6 +113,10 @@ class User(Base):
         """Check if user is active"""
         return self.status == UserStatus.ACTIVE
 
+    @is_active.setter
+    def is_active(self, value):
+        self._is_active = value
+
     @property
     def is_blocked(self) -> bool:
         """Check if user is blocked"""
