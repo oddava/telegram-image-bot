@@ -101,15 +101,18 @@ services:
     image: caddy:2
     container_name: ${COMPOSE_PROJECT_NAME}-caddy
     restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SITE_URL: ${SITE_URL}
     ports:
       - "80:80"
       - "443:443"
-    networks:
-      - default
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile-${PROD:-local}:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
+
 
   migrator:
       build:

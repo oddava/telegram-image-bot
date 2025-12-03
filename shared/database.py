@@ -23,7 +23,6 @@ from tenacity import (
 import sqlalchemy.exc
 from shared.config import settings
 
-
 # ==================== Base Model ====================
 
 class Base(DeclarativeBase):
